@@ -1,0 +1,26 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+*.csproj
+*.sln
+*.suo
+.vs/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+*.egg-info/
+
+# Visual Studio
+.vscode/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
