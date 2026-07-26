@@ -1,6 +1,8 @@
 """
 Setup guide:
 
+
+Terminal(CMD):
 1. Install Python 3.12
    If another version is installed , thats fine both will run but you need 3.12
 
@@ -9,6 +11,9 @@ Setup guide:
 
 3. Run this script:
        py -3.12 holistic_webcam_test.py 
+
+4. In vs code set version of python (bottom right) to 3.12
+
 
 Press 'q' in the preview window (or Ctrl+C in the terminal) to quit.
 """
