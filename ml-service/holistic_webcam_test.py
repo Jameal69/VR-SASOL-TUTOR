@@ -1,11 +1,14 @@
 """
-Setup guide :
+Setup guide:
 
-Install python version 3.12
-    pip install mediapipe opencv-python
+1. Install Python 3.12
+   If another version is installed , thats fine both will run but you need 3.12
 
-Run:
-    python holistic_webcam_test.py (this code)
+2. Install dependencies:
+       py -3.12 -m pip install mediapipe opencv-python
+
+3. Run this script:
+       py -3.12 holistic_webcam_test.py 
 
 Press 'q' in the preview window (or Ctrl+C in the terminal) to quit.
 """
