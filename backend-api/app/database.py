@@ -5,8 +5,12 @@ Decision (see docs/DECISIONS.md): single PostgreSQL instance, no separate MongoD
 Landmark data is stored as JSONB columns instead of a document store.
 """
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+load_dotenv()
+
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
