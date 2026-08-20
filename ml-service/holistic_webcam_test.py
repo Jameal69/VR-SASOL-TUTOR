@@ -13,7 +13,7 @@ Terminal(CMD):
        py -3.12 holistic_webcam_test.py 
 
 4. In vs code set version of python (bottom right) to 3.12
-
+        This can only happen if python extension is installed
 
 Press 'q' in the preview window (or Ctrl+C in the terminal) to quit.
 """
