@@ -1,33 +1,17 @@
 """
 DTW sign classifier - proof of concept.
 
-Two modes, run from the terminal:
+    py -3.12 dtw_recognizer.py record <label>    # save reference examples
+    py -3.12 dtw_recognizer.py compare <label>   # test a live attempt
 
-    Record reference examples of a sign:
-        py -3.12 dtw_recognizer.py record <label>
-        e.g. py -3.12 dtw_recognizer.py record hello
+SPACE to start/stop a recording, 'q' to quit.
 
-    Test a live attempt against saved references:
-        py -3.12 dtw_recognizer.py compare <label>
-        e.g. py -3.12 dtw_recognizer.py compare hello
+Each frame's hand landmarks are normalized (position/scale/rotation
+invariant) and flattened into a vector. A recording is a sequence of
+these, saved as .npy under references/<label>/. Comparing runs DTW
+against each saved reference and votes on how many are a close match.
 
-Controls (both modes): press SPACE to start recording a repetition, SPACE
-again to stop it. Press 'q' to quit.
-
-How it works:
-- Each frame's hand landmarks (both hands, 21 points x 3 coords each) get
-  flattened into one 126-number vector. A hand that isn't visible that
-  frame is just zeros - keeps every frame the same shape regardless of
-  which hand(s) are showing.
-- A "recording" is a sequence of these vectors, one per frame, saved as a
-  .npy file under references/<label>/.
-- Comparing a live attempt works by running DTW (Dynamic Time Warping)
-  between its sequence and every saved reference sequence for that label.
-  DTW lines up two sequences that don't move at exactly the same speed,
-  then measures how different they are once aligned - low distance means
-  a close match, high distance means probably a different gesture.
-- This is a placeholder gesture until Juan's curriculum file lands - same
-  code, just record over real Lesson 1 signs once that's ready.
+Placeholder gesture until lessons are added
 """
 
 import os
@@ -72,18 +56,27 @@ def ensure_model():
 
 def landmarks_to_vector(landmarks):
     """21 landmarks -> flat list of 63 floats, normalized so the result
-    reflects hand SHAPE rather than where the hand is in the camera frame.
+    reflects hand SHAPE only - not where the hand is in frame, how far it
+    is from the camera, or which way it's rotated.
 
     Without this, two very different hand shapes held in roughly the same
     spot on screen look almost identical to DTW, since raw x/y/z are
     dominated by position-in-frame rather than finger configuration - this
     is what caused "different" gestures to score as close matches.
 
-    Fix: make every landmark relative to the wrist (landmark 0), so moving
-    your hand around the frame doesn't change the vector at all - then
-    divide by the wrist-to-middle-knuckle distance, so being closer to or
-    further from the camera doesn't change it either. What's left is just
-    the hand's shape.
+    Three corrections, stacked:
+    1. Translation: make every landmark relative to the wrist (landmark 0),
+       so moving your hand around the frame doesn't change the vector.
+    2. Scale: divide by the wrist-to-middle-knuckle distance, so being
+       closer to or further from the camera doesn't change it either.
+    3. Rotation: steps 1-2 alone still leave the hand's orientation baked
+       into the numbers - the same gesture held at a different angle can
+       still look different. Fixed by building a small local coordinate
+       system out of the hand itself (v1 pointing toward the middle
+       knuckle, v2 toward the index knuckle, v3 perpendicular to both),
+       then expressing every landmark in that hand-relative frame instead
+       of the camera's frame. Rotate your hand any way you like - these
+       three reference vectors rotate with it, so the numbers stay put.
     """
     if not landmarks:
         return [0.0] * 63
@@ -95,7 +88,28 @@ def landmarks_to_vector(landmarks):
     scale = np.linalg.norm(pts[9] - wrist)  # wrist -> middle finger MCP
     if scale < 1e-6:
         scale = 1e-6  # avoid divide-by-zero on a bad frame
-    normalized = relative / scale  # scale-invariant
+    relative = relative / scale  # scale-invariant
+
+    # Build a local coordinate frame from the hand itself.
+    v1 = relative[9]  # wrist -> middle finger MCP, already unit-ish length
+    v1_norm = np.linalg.norm(v1)
+    if v1_norm < 1e-6:
+        v1_norm = 1e-6
+    v1 = v1 / v1_norm
+
+    # Second reference direction: wrist -> index finger MCP, orthogonalized
+    # against v1 (Gram-Schmidt) so v1/v2 are perpendicular.
+    v2_raw = relative[5]
+    v2 = v2_raw - np.dot(v2_raw, v1) * v1
+    v2_norm = np.linalg.norm(v2)
+    if v2_norm < 1e-6:
+        v2_norm = 1e-6
+    v2 = v2 / v2_norm
+
+    v3 = np.cross(v1, v2)  # perpendicular to both - completes the frame
+
+    basis = np.stack([v1, v2, v3])  # 3x3
+    normalized = relative @ basis.T  # re-express every point in this frame
 
     return normalized.flatten().tolist()
 
