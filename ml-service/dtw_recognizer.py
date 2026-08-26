@@ -1,15 +1,5 @@
 """
-DTW sign classifier - proof of concept.
-
-    py -3.12 dtw_recognizer.py record <label>    # save reference examples
-    py -3.12 dtw_recognizer.py compare <label>   # test a live attempt
-
-SPACE to start/stop a recording, 'q' to quit.
-
-Each frame's hand landmarks are normalized (position/scale/rotation
-invariant) and flattened into a vector. A recording is a sequence of
-these, saved as .npy under references/<label>/. Comparing runs DTW
-against each saved reference and votes on how many are a close match.
+DTW sign classifier - proof of concept. See README.md for setup and usage.
 
 Placeholder gesture until lessons are added
 """
@@ -32,17 +22,14 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "holistic_landmarker.task")
 REFERENCES_DIR = os.path.join(SCRIPT_DIR, "references")
 
-# Sits between same-gesture distances across sessions (~0.5-0.8 observed)
-# and different-gesture distances (~1.9-2.8 observed). Used per-reference
-# below, combined with majority voting rather than trusting a single
-# closest match. Revisit once tested against real Lesson 1 signs and more
-# people's hands.
+# Between same-gesture (~0.5-0.8) and different-gesture (~1.9-2.8)
+# distances observed so far. Revisit with real Lesson 1 signs / more hands.
+
 MATCH_THRESHOLD = 2.0
 
-# Fraction of references that must be within MATCH_THRESHOLD for the
-# overall verdict to be MATCH. 0.5 = majority vote. Using every reference
-# rather than just the single closest one is more robust - one unusually
-# loose recording shouldn't be able to single-handedly call a match.
+# Fraction of references that must match for an overall MATCH verdict.
+# 0.5 = majority vote - more robust than trusting only the closest one.
+
 VOTE_FRACTION = 0.5
 
 
@@ -55,29 +42,19 @@ def ensure_model():
 
 
 def landmarks_to_vector(landmarks):
-    """21 landmarks -> flat list of 63 floats, normalized so the result
-    reflects hand SHAPE only - not where the hand is in frame, how far it
-    is from the camera, or which way it's rotated.
+    """21 landmarks -> flat list of 63 floats, normalized to reflect hand
+SHAPE only - not position in frame, distance from camera, or rotation.
 
-    Without this, two very different hand shapes held in roughly the same
-    spot on screen look almost identical to DTW, since raw x/y/z are
-    dominated by position-in-frame rather than finger configuration - this
-    is what caused "different" gestures to score as close matches.
+Raw x/y/z are dominated by where the hand is on screen, not finger
+shape - this caused different gestures to score as close matches.
 
-    Three corrections, stacked:
-    1. Translation: make every landmark relative to the wrist (landmark 0),
-       so moving your hand around the frame doesn't change the vector.
-    2. Scale: divide by the wrist-to-middle-knuckle distance, so being
-       closer to or further from the camera doesn't change it either.
-    3. Rotation: steps 1-2 alone still leave the hand's orientation baked
-       into the numbers - the same gesture held at a different angle can
-       still look different. Fixed by building a small local coordinate
-       system out of the hand itself (v1 pointing toward the middle
-       knuckle, v2 toward the index knuckle, v3 perpendicular to both),
-       then expressing every landmark in that hand-relative frame instead
-       of the camera's frame. Rotate your hand any way you like - these
-       three reference vectors rotate with it, so the numbers stay put.
-    """
+1. Translation: landmarks made relative to the wrist.
+2. Scale: divided by wrist-to-middle-knuckle distance.
+3. Rotation: re-expressed in a coordinate frame built from the hand
+   itself (v1 toward middle knuckle, v2 toward index knuckle, v3
+   perpendicular), so the same gesture at any angle still matches.
+"""
+
     if not landmarks:
         return [0.0] * 63
 
@@ -213,6 +190,25 @@ def run_record(label):
     cv2.destroyAllWindows()
 
 
+def classify(sequence, references, threshold=MATCH_THRESHOLD):
+    """Given a live attempt and reference recordings, return
+        (is_match, confidence, distances).
+
+        confidence is 0.0-1.0, the fraction of references this attempt was
+        close enough to - meant to drive the live accuracy bar on Screen 7.
+
+    Limitation: DTW needs a COMPLETE sequence, so this only scores an
+    attempt once it's finished, not frame-by-frame mid-sign. A genuinely
+    live bar needs a different approach (e.g. windowed DTW).
+    """
+
+    distances = [dtw_distance(sequence, ref) for ref in references]
+    votes = sum(1 for d in distances if d <= threshold)
+    confidence = votes / len(distances)
+    is_match = confidence >= VOTE_FRACTION
+    return is_match, confidence, distances
+
+
 def run_compare(label):
     ensure_model()
     label_dir = os.path.join(REFERENCES_DIR, label)
@@ -249,18 +245,15 @@ def run_compare(label):
         print("No usable attempt captured.")
         return
 
-    distances = [dtw_distance(sequence, ref) for ref in references]
-    votes = sum(1 for d in distances if d <= MATCH_THRESHOLD)
-    vote_ratio = votes / len(distances)
+    is_match, confidence, distances = classify(sequence, references)
 
     print("\nDTW distance to each reference:")
     for i, d in enumerate(distances):
         flag = "within threshold" if d <= MATCH_THRESHOLD else ""
         print(f"  rep_{i}: {d:.3f} {flag}")
 
-    print(f"\n{votes}/{len(distances)} references within threshold ({MATCH_THRESHOLD}) "
-          f"= {vote_ratio:.0%}")
-    if vote_ratio >= VOTE_FRACTION:
+    print(f"\nConfidence: {confidence:.0%}")
+    if is_match:
         print(f"MATCH - looks like '{label}'")
     else:
         print(f"NO MATCH - doesn't look like '{label}'")

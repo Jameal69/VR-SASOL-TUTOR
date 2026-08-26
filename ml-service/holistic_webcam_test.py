@@ -1,21 +1,9 @@
 """
-Setup guide:
+Feasibility spike (done, superseded by landmark_streamer.py and
+dtw_recognizer.py) - kept for reference. See README.md for setup.
 
-
-Terminal(CMD):
-1. Install Python 3.12
-   If another version is installed , thats fine both will run but you need 3.12
-
-2. Install dependencies:
-       py -3.12 -m pip install mediapipe opencv-python
-
-3. Run this script:
-       py -3.12 holistic_webcam_test.py 
-
-4. In vs code set version of python (bottom right) to 3.12
-        This can only happen if python extension is installed
-
-Press 'q' in the preview window (or Ctrl+C in the terminal) to quit.
+Uses MediaPipe's Tasks API (HolisticLandmarker), not the old
+`mp.solutions.holistic`, which has been removed from recent releases.
 """
 
 import os

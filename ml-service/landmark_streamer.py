@@ -1,18 +1,6 @@
 """
-Setup guide:
-1. Install Python 3.12 (mediapipe doesn't support 3.13/3.14 yet).
-2. py -3.12 -m pip install mediapipe opencv-python
-3. Run this FIRST, before pressing Play in Unity:
-       py -3.12 landmark_streamer.py
-   Wait for "Waiting for Unity to connect..." before switching to Unity.
-4. Press Play in Unity - it connects, and landmarks stream live.
-
-Ctrl+C to stop the server.
-
-Extends holistic_webcam_test.py (which just printed to console) by
-opening a TCP socket and streaming the same landmark data to Unity,
-once per frame, as its own separate process (never import MediaPipe
-into Unity directly - it would slow down VR rendering).
+Streams MediaPipe Holistic hand landmarks to Unity over a local TCP
+socket. See README.md for setup and usage.
 """
 
 import json
@@ -37,7 +25,7 @@ PORT = 5052
 
 
 def ensure_model():
-    """Download the holistic landmarker model bundle if it isn't already."""
+    """Download the holistic landmarker model bundle if it isn't present yet."""
     if not os.path.exists(MODEL_PATH):
         print(f"Downloading model to {MODEL_PATH} ...")
         urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
@@ -45,14 +33,18 @@ def ensure_model():
 
 
 def landmarks_to_list(landmarks):
-    """Convert landmarks to a plain [x, y, z] list for JSON. Empty list = hand not visible."""
+    """Convert a MediaPipe landmark list into a plain list of [x, y, z] floats
+    so it can be serialized to JSON. Returns an empty list if no hand is
+    detected this frame - Unity should treat that as 'hand not visible'."""
     if not landmarks:
         return []
     return [[round(lm.x, 4), round(lm.y, 4), round(lm.z, 4)] for lm in landmarks]
 
 
 def wait_for_unity_connection():
-    """Open a TCP server socket and block until Unity connects."""
+    """Open a TCP server socket and block until Unity connects to it.
+    Using a single blocking accept() is deliberately simple for this proof
+    -of-concept - fine for one Python process talking to one Unity instance."""
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
@@ -95,14 +87,17 @@ def main():
 
                 result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-                # One JSON message per frame; consistent shape even when a hand is empty.
+                # Build one JSON message per frame. Sending both hands every
+                # frame, even if empty, keeps the message shape consistent -
+                # easier for Unity to parse than a shape that changes.
                 message = {
                     "t": timestamp_ms,
                     "left_hand": landmarks_to_list(result.left_hand_landmarks),
                     "right_hand": landmarks_to_list(result.right_hand_landmarks),
                 }
 
-                # Newline-delimited JSON so Unity can read it with ReadLine().
+                # Newline-delimited JSON: one full JSON object per line, so
+                # Unity can read it with a simple ReadLine() on its end.
                 payload = (json.dumps(message) + "\n").encode("utf-8")
 
                 try:
@@ -111,7 +106,9 @@ def main():
                     print("Unity disconnected.")
                     break
 
-                # Local preview window to confirm the camera feed.
+                # Local preview window, same as the spike script - handy for
+                # confirming the camera feed while you watch Unity's console
+                # in a separate window.
                 cv2.imshow("Landmark streamer (press q to quit)", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
