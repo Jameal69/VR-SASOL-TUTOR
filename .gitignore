@@ -9,6 +9,9 @@
 *.sln
 *.suo
 .vs/
+UserSettings/
+
+
 
 # Python
 __pycache__/
@@ -24,3 +27,9 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# ml-service: local test recordings and downloaded model - regenerate locally, don't commit
+ml-service/references/
+ml-service/holistic_landmarker.task
+
+
