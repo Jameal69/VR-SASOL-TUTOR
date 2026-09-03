@@ -13,6 +13,7 @@ from sqlalchemy import func
 
 from app.database import Base, engine, get_db
 from app import models, schemas, auth
+from app import gesture_classifier
 
 # Creates tables if they don't exist yet. Fine for early dev; swap for Alembic
 # migrations once the schema stabilises (see database/ folder for migrations later).
@@ -188,16 +189,20 @@ def end_session(
 # ---------------- Gestures ----------------
 
 @app.post("/api/gestures/classify", response_model=schemas.GestureClassifyResponse)
-def classify_gesture(payload: schemas.GestureClassifyRequest):
+def classify_gesture(payload: schemas.GestureClassifyRequest, db: DBSession = Depends(get_db)):
     """
-    PLACEHOLDER — no real classifier wired in yet. Returns a dummy result so
-    Unity/frontend work can proceed against this endpoint without waiting on
-    Christian's model. Replace the body of this function once ml-service/
-    exposes something callable (or confirm this endpoint moves on-device —
-    see the open question in docs/api-contract.md).
+      shouold be wired to Chritians DTW classifier logic in app/gesture_classifier.py instead of the hardcoded placeholdder. It will still return unkonw, o.o for now since theres no real refernce recordings yet. 
+      Juans content still has to be seeded with christians recordings
     """
-    return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0)
+    item = db.query(models.CurriculumItem).filter(models.CurriculumItem.id == payload.curriculum_item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Curriculum item not found")
 
+    sign_label = item.sign_name.lower().replace(" ", "_")
+    landmark_frames = [frame.model_dump() for frame in payload.landmark_sequence]
+
+    predicted_sign, confidence = gesture_classifier.classify_sequence(landmark_frames, sign_label)
+    return schemas.GestureClassifyResponse(predicted_sign=predicted_sign, confidence_score=confidence)
 
 @app.post("/api/gestures", response_model=schemas.GestureCreateResponse, status_code=201)
 def create_gesture_record(

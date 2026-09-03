@@ -86,7 +86,8 @@ class SessionEndRequest(BaseModel):
 # ---- Gesture ----
 class LandmarkFrame(BaseModel):
     t: float
-    hand_landmarks: List[List[float]]
+    left_hand: List[List[float]] = []
+    right_hand: List[List[float]] = []
 
 
 class GestureClassifyRequest(BaseModel):
