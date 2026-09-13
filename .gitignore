@@ -28,8 +28,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-# ml-service: local test recordings and downloaded model - regenerate locally, don't commit
-ml-service/references/
+# ml-service: local test recordings and downloaded model - regenerate locally, don't commit (i (Jameal Engelbrecht) removed it topush my 100% confidence recordings as reference for the group)
+
 ml-service/holistic_landmarker.task
 
 
