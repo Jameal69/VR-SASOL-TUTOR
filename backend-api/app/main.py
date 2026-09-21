@@ -226,17 +226,40 @@ def create_gesture_record(
 
 @app.post("/api/feedback", response_model=schemas.FeedbackResponse)
 def create_feedback(payload: schemas.FeedbackRequest, db: DBSession = Depends(get_db)):
+    """
+    Derives real scores from the gesture's actual confidence_score instead of a
+    hardcoded 3,3,3,3. Still not a true per-channel breakdown, that needs
+    Christian/Markus's four-dimension scoring work (see semester roadmap,
+    September). This is an honest interim step: real data driving all four
+    numbers uniformly, not fake data, but not full diagnostic accuracy yet.
+    """
     gesture = db.query(models.GestureRecord).filter(models.GestureRecord.id == payload.gesture_id).first()
     if not gesture:
         raise HTTPException(status_code=404, detail="Gesture record not found")
 
-    # PLACEHOLDER scoring — replace once there's a real basis for per-dimension scores.
-    dimension_scores = schemas.DimensionScores(handshape=3, movement=3, spatial_placement=3, non_manual=3)
+    confidence = gesture.confidence_score or 0.0
+    # Map 0.0-1.0 confidence onto a 1-5 scale, same scale the wireframes use.
+    derived_score = max(1, min(5, round(confidence * 5)))
+
+    dimension_scores = schemas.DimensionScores(
+        handshape=derived_score,
+        movement=derived_score,
+        spatial_placement=derived_score,
+        non_manual=derived_score,
+    )
+
+    if confidence >= 0.8:
+        suggestion = "Strong match, keep signing like that."
+    elif confidence >= 0.5:
+        suggestion = "Close, but not quite matching the reference, try again."
+    else:
+        suggestion = "Didn't match closely, check the handshape and try again."
+
     feedback = models.Feedback(
         gesture_id=gesture.id,
-        accuracy_score=gesture.confidence_score or 0.0,
+        accuracy_score=confidence,
         dimension_scores=dimension_scores.model_dump(),
-        suggestion_text="Placeholder feedback — real scoring logic not implemented yet.",
+        suggestion_text=suggestion,
     )
     db.add(feedback)
     db.commit()
