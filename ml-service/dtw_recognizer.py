@@ -12,6 +12,7 @@ longer needs a re-record.
 """
 
 import os
+import re
 import sys
 import time
 
@@ -113,12 +114,14 @@ def run_record(label):
     ensure_model()
     label_dir = os.path.join(REFERENCES_DIR, label)
     os.makedirs(label_dir, exist_ok=True)
-    existing = [f for f in os.listdir(label_dir) if f.endswith(".npy")]
+    # Next free number after the highest existing rep_N, not a count of files,
+    # so moving an old rep out never makes a new recording overwrite another.
+    numbers = [int(m.group(1)) for m in (re.match(r"rep_(\d+)\.", f) for f in os.listdir(label_dir)) if m]
 
     cap = cv2.VideoCapture(0)
     start_time = time.time()
 
-    rep_index = len(existing)
+    rep_index = max(numbers) + 1 if numbers else 0
     with vision.HolisticLandmarker.create_from_options(make_options()) as landmarker:
         while True:
             sequence = capture_sequence(cap, landmarker, start_time,

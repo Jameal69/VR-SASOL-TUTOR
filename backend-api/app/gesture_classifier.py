@@ -237,5 +237,10 @@ def classify_sequence(landmark_sequence, sign_label):
     if DEBUG_PRINT_DISTANCES:
         print(f"    is_closest_match={is_closest_match}  confidence={confidence:.2f}")
 
+    # A different sign being closer means the attempt was that sign, not a weak
+    # version of the target, so it earns no credit (feedback scores use this).
+    if not is_closest_match:
+        confidence = 0.0
+
     predicted_sign = sign_label if (confidence >= VOTE_FRACTION and is_closest_match) else "unknown"
     return predicted_sign, confidence
