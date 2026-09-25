@@ -7,21 +7,39 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 /// <summary>
-/// Extends what LandmarkReceiver proved works: connects to the same Python
-/// socket, but instead of just logging raw frames, buffers them while the
-/// player is "recording" an attempt, then sends the whole sequence to the
-/// real backend's /api/gestures/classify endpoint and logs what comes back.
+/// Shape of the backend's /api/gestures/classify response. JsonUtility ignores any extra fields in the backend returns, so this only lists what we display.
+
+/// </summary>
+[Serializable]
+public class GestureClassifyResponse
+{
+    public string predicted_sign;
+    public float confidence_score;
+}
+
+/// <summary>
+/// Connects to landmark_streamer.py's socket, buffers hand frames while the
+/// player is "recording" an attempt, sends the sequence to the real backend's
+/// /api/gestures/classify endpoint, and shows the result ON SCREEN (Game view)
+/// as well as in the Console.
 ///
-/// This is the actual missing link between "Unity receives hand data" and
-/// "Unity knows which sign was performed." Nothing visual yet, that's a
-/// separate step, this proves the full loop end to end inside Unity itself.
+/// Controls (Play mode, Game view focused): SPACE to start/stop recording.
 ///
-/// Controls (Play mode): SPACE to start/stop recording an attempt.
+/// IMPORTANT: this script opens its own connection to port 5052, the same one
+/// LandmarkReceiver uses. Only ONE of them should be enabled at a time.
+/// Untick LandmarkReceiver in the Inspector when using this script.
+///
+/// Per sign you test, set BOTH fields in the Inspector:
+///   curriculumItemId  (the sign's id from /api/curriculum/lessons)
+///   expectedSignName  (what the on-screen prompt and MATCH check use)
 /// </summary>
 public class GestureClassifierClient : MonoBehaviour
 {
-    [Tooltip("Paste the real curriculum_item_id for the sign you're testing, from GET /api/curriculum/lessons/{lesson_id} in /docs.")]
-    public string curriculumItemId = "PASTE_A_REAL_ID_HERE";
+    [Tooltip("Real curriculum_item_id for the sign you're testing (from /api/curriculum/lessons in /docs).")]
+    public string curriculumItemId = "701d037f-2703-47a5-a09b-5eb3effa08f5";
+
+    [Tooltip("Name of the sign being tested, e.g. Hello, Goodbye, Please, Thank You. Used for the on-screen prompt and match check.")]
+    public string expectedSignName = "Hello";
 
     private const string BackendUrl = "http://localhost:8000/api/gestures/classify";
 
@@ -29,10 +47,16 @@ public class GestureClassifierClient : MonoBehaviour
     private NetworkStream stream;
     private Thread receiveThread;
     private volatile bool keepRunning = true;
+    private volatile bool streamConnected = false;
+    private volatile bool isRecording = false;
 
     private readonly object bufferLock = new object();
     private List<string> rawFrameBuffer = new List<string>();
-    private bool isRecording = false;
+
+    // On-screen display state (only touched on the main thread).
+    private string statusText = "Waiting for camera stream...";
+    private string resultText = "";
+    private bool? lastWasMatch = null;
 
     void Start()
     {
@@ -47,6 +71,7 @@ public class GestureClassifierClient : MonoBehaviour
         {
             client = new TcpClient("127.0.0.1", 5052);
             stream = client.GetStream();
+            streamConnected = true;
             Debug.Log("[GestureClassifierClient] Connected to Python landmark streamer.");
 
             byte[] buffer = new byte[4096];
@@ -82,24 +107,62 @@ public class GestureClassifierClient : MonoBehaviour
         {
             Debug.LogError("[GestureClassifierClient] Connection error: " + e.Message);
         }
+        finally
+        {
+            streamConnected = false;
+        }
+    }
+
+    bool SpacePressedThisFrame()
+    {
+#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+        // Project uses the new Input System only; the old Input class would throw.
+        return UnityEngine.InputSystem.Keyboard.current != null
+            && UnityEngine.InputSystem.Keyboard.current.spaceKey.wasPressedThisFrame;
+#else
+        return Input.GetKeyDown(KeyCode.Space);
+#endif
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (!isRecording && !streamConnected)
         {
+            statusText = "Camera stream NOT connected. Start landmark_streamer.py first, then press Play.";
+        }
+
+        if (SpacePressedThisFrame())
+        {
+            if (!streamConnected)
+            {
+                Debug.LogWarning("[GestureClassifierClient] Not connected to the camera stream yet.");
+                return;
+            }
+
             if (!isRecording)
             {
                 lock (bufferLock) { rawFrameBuffer.Clear(); }
                 isRecording = true;
+                lastWasMatch = null;
+                resultText = "";
+                statusText = "RECORDING... perform the sign, then press SPACE to stop";
                 Debug.Log("[GestureClassifierClient] Recording started...");
             }
             else
             {
                 isRecording = false;
+                statusText = "Sending to backend...";
                 Debug.Log("[GestureClassifierClient] Recording stopped, sending to backend...");
                 SendCapturedSequence();
             }
+        }
+        else if (!isRecording && streamConnected && statusText.StartsWith("Camera stream NOT"))
+        {
+            statusText = "Ready. Press SPACE to start recording";
+        }
+        else if (!isRecording && streamConnected && statusText.StartsWith("Waiting"))
+        {
+            statusText = "Ready. Press SPACE to start recording";
         }
     }
 
@@ -114,11 +177,12 @@ public class GestureClassifierClient : MonoBehaviour
         if (framesCopy.Count < 3)
         {
             Debug.LogWarning("[GestureClassifierClient] Not enough frames captured, try again.");
+            statusText = "Not enough frames captured, try again (press SPACE)";
             return;
         }
 
-        // Each buffered line is already valid JSON, e.g. {"t":..,"left_hand":[...],"right_hand":[...]}
-        // matching the backend's LandmarkFrame schema exactly, so we just wrap them.
+        // Each buffered line is already valid JSON, e.g. {"t":..,"left_hand":[...],"right_hand":[...]}  matching the backend's LandmarkFrame schema exactly, so we can just wrap them.
+        
         StringBuilder json = new StringBuilder();
         json.Append("{");
         json.Append("\"session_id\":\"unity-live-test\",");
@@ -142,11 +206,72 @@ public class GestureClassifierClient : MonoBehaviour
 
         if (request.result == UnityWebRequest.Result.Success)
         {
-            Debug.Log("[GestureClassifierClient] Backend response: " + request.downloadHandler.text);
+            string body = request.downloadHandler.text;
+            Debug.Log("[GestureClassifierClient] Backend response: " + body);
+            HandleResponse(body);
         }
         else
         {
             Debug.LogError("[GestureClassifierClient] Request failed: " + request.error + " | " + request.downloadHandler.text);
+            statusText = "Request failed: " + request.error + " (is the backend running?)";
+        }
+
+        request.Dispose();
+    }
+
+    void HandleResponse(string body)
+    {
+        GestureClassifyResponse parsed = null;
+        try
+        {
+            parsed = JsonUtility.FromJson<GestureClassifyResponse>(body);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[GestureClassifierClient] Could not parse response: " + e.Message);
+        }
+
+        if (parsed == null || string.IsNullOrEmpty(parsed.predicted_sign))
+        {
+            resultText = "No sign recognised";
+            lastWasMatch = false;
+            statusText = "Done. Press SPACE to try again";
+            return;
+        }
+
+        int percent = Mathf.RoundToInt(parsed.confidence_score * 100f);
+        resultText = "Detected: " + parsed.predicted_sign + " (" + percent + "%)";
+        lastWasMatch = Normalise(parsed.predicted_sign) == Normalise(expectedSignName);
+        statusText = "Done. Press SPACE to try again";
+    }
+
+    static string Normalise(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.ToLowerInvariant().Replace(" ", "").Replace("_", "");
+    }
+
+    void OnGUI()
+    {
+        GUIStyle style = new GUIStyle(GUI.skin.label);
+        style.fontSize = 26;
+        style.fontStyle = FontStyle.Bold;
+        style.wordWrap = true;
+        style.normal.textColor = Color.white;
+
+        GUI.Box(new Rect(10, 10, 880, 190), GUIContent.none);
+        GUI.Label(new Rect(25, 15, 850, 40), "Sign to perform: " + expectedSignName, style);
+        GUI.Label(new Rect(25, 55, 850, 70), statusText, style);
+
+        if (!string.IsNullOrEmpty(resultText))
+        {
+            GUI.Label(new Rect(25, 130, 850, 35), resultText, style);
+        }
+
+        if (lastWasMatch.HasValue)
+        {
+            style.normal.textColor = lastWasMatch.Value ? Color.green : Color.red;
+            GUI.Label(new Rect(25, 160, 850, 35), lastWasMatch.Value ? "MATCH" : "NO MATCH", style);
         }
     }
 

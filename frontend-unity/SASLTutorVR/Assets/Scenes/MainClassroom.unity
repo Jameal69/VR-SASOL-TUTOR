@@ -394,6 +394,7 @@ GameObject:
   - component: {fileID: 1078483162}
   - component: {fileID: 1078483164}
   - component: {fileID: 1078483163}
+  - component: {fileID: 1078483168}
   m_Layer: 0
   m_Name: LandmarkReceiver
   m_TagString: Untagged
@@ -423,7 +424,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1078483161}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d72a80f345b42b141b9ce90126b4bd46, type: 3}
   m_Name: 
@@ -435,11 +436,25 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1078483161}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d72a80f345b42b141b9ce90126b4bd46, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LandmarkReceiver
+--- !u!114 &1078483168
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1078483161}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4ba50a73fed44f46870bfc5dee6d9c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GestureClassifierClient
+  curriculumItemId: 701d037f-2703-47a5-a09b-5eb3effa08f5
+  expectedSignName: Hello
 --- !u!1001 &1109981945
 PrefabInstance:
   m_ObjectHideFlags: 0

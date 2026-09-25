@@ -62,6 +62,11 @@ def main():
     options = vision.HolisticLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=MODEL_PATH),
         running_mode=vision.RunningMode.VIDEO,
+        # Lower than the defaults (0.5) so tracking is less eager to give up.
+        # Message format sent to Unity is unchanged.
+        min_pose_detection_confidence=0.3,
+        min_pose_landmarks_confidence=0.3,
+        min_hand_landmarks_confidence=0.3,
     )
 
     server_socket, client_socket = wait_for_unity_connection()
@@ -109,7 +114,24 @@ def main():
                 # Local preview window, same as the spike script - handy for
                 # confirming the camera feed while you watch Unity's console
                 # in a separate window.
-                cv2.imshow("Landmark streamer (press q to quit)", frame)
+                # Draw what the tracker actually sees, so you can tell when it
+                # loses your hands. Circles = hand points. Text is added after
+                # mirroring so it stays readable.
+                h, w = frame.shape[:2]
+                for hand, colour in ((result.left_hand_landmarks, (0, 255, 0)),
+                                     (result.right_hand_landmarks, (255, 128, 0))):
+                    for lm in hand or []:
+                        cv2.circle(frame, (int(lm.x * w), int(lm.y * h)), 3, colour, -1)
+                preview = cv2.flip(frame, 1)
+                status = [
+                    ("BODY found" if result.pose_landmarks else "BODY NOT found", bool(result.pose_landmarks)),
+                    ("LEFT hand" if result.left_hand_landmarks else "left hand lost", bool(result.left_hand_landmarks)),
+                    ("RIGHT hand" if result.right_hand_landmarks else "right hand lost", bool(result.right_hand_landmarks)),
+                ]
+                for i, (label, ok_flag) in enumerate(status):
+                    cv2.putText(preview, label, (10, 28 + 28 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                                (0, 200, 0) if ok_flag else (0, 0, 255), 2)
+                cv2.imshow("Landmark streamer (press q to quit)", preview)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
     finally:
