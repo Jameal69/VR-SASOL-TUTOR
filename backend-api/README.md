@@ -50,3 +50,18 @@ storage, progress aggregation.
    feels stable — fine to skip this while things are still moving fast.
 4. Talk to Jason about whether `/gestures/classify` survives as a real endpoint or gets removed
    once the classify-on-device question is settled.
+
+## Curriculum scope & testing status (Lessons 1–3)
+
+**Content included**
+- Lesson 1 — Greetings (Hello, Goodbye, Please, Thank You): content + recognition tested (reference recordings exist).
+- Lesson 2 — Alphabet A–Z: content only. Recognition not yet tested — no reference recordings captured.
+- Lesson 3 — Numbers 1–9: content only. Recognition not yet tested — no reference recordings captured.
+
+**Not tested / out of scope**
+- Recognition of the alphabet and numbers: the lessons appear in the curriculum, but the classifier cannot yet identify these signs — reference recordings are still to be captured.
+- Advanced handshape variants (e.g. Small C, Closed Small C, Flat B, and other non-core handshapes) are not included or tested.
+- Visually similar letters (U/V, M/N, K/P, I/J, D/F/O) are expected to be hard for the current recognizer to distinguish even once references exist; treat as untested until validated.
+
+**Verification**
+- `VERIFIED = False` in `app/curriculum_data.py`: the alphabet/number articulations are drafted and cross-checked against the RealSASL handshape chart, but not yet confirmed by a Deaf advisor (Milestone report §8.1). A few entries (letters M, N, T; numbers 3, 4, 6, 8, 9) still need confirming against the chart image.
