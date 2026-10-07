@@ -201,7 +201,16 @@ def classify_gesture(payload: schemas.GestureClassifyRequest, db: DBSession = De
     sign_label = item.sign_name.lower().replace(" ", "_")
     landmark_frames = [frame.model_dump() for frame in payload.landmark_sequence]
 
-    predicted_sign, confidence = gesture_classifier.classify_sequence(landmark_frames, sign_label)
+    # Lesson scoping: only compare against signs from the same lesson, so e.g.
+    # a flat-hand letter can't beat Hello once the alphabet has recordings.
+    lesson_signs = db.query(models.CurriculumItem.sign_name).filter(
+        models.CurriculumItem.lesson_id == item.lesson_id
+    ).all()
+    allowed_signs = [name.lower().replace(" ", "_") for (name,) in lesson_signs]
+
+    predicted_sign, confidence = gesture_classifier.classify_sequence(
+        landmark_frames, sign_label, allowed_signs=allowed_signs
+    )
     return schemas.GestureClassifyResponse(predicted_sign=predicted_sign, confidence_score=confidence)
 
 @app.post("/api/gestures", response_model=schemas.GestureCreateResponse, status_code=201)
