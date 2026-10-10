@@ -25,6 +25,7 @@ public class AvatarResultReactor : MonoBehaviour
 
     static readonly Color MatchColour = new Color(0.35f, 1f, 0.35f);
     static readonly Color NoMatchColour = new Color(1f, 0.4f, 0.4f);
+    static readonly Color RetryColour = new Color(1f, 0.85f, 0.3f);
 
     Animator animator;
     Transform head;
@@ -46,6 +47,7 @@ public class AvatarResultReactor : MonoBehaviour
         {
             classifier.ResultReceived += OnResult;
             classifier.TargetChanged += ShowPrompt;
+            classifier.RetryRequested += OnRetry;
         }
         else
         {
@@ -59,6 +61,7 @@ public class AvatarResultReactor : MonoBehaviour
         {
             classifier.ResultReceived -= OnResult;
             classifier.TargetChanged -= ShowPrompt;
+            classifier.RetryRequested -= OnRetry;
         }
     }
 
@@ -82,6 +85,14 @@ public class AvatarResultReactor : MonoBehaviour
         if (resultText == null) return;
         resultText.text = "Sign: " + sign;
         resultText.color = Color.white;
+    }
+
+    // Poor tracking isn't the learner's mistake: show the hint, no head shake.
+    void OnRetry(string message)
+    {
+        if (resultText == null) return;
+        resultText.text = message;
+        resultText.color = RetryColour;
     }
 
     void OnResult(string predicted, float confidence, bool isMatch)

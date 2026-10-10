@@ -27,6 +27,8 @@ import requests
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.core.base_options import BaseOptions
 
+from landmark_streamer import upper_body_visible
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(SCRIPT_DIR, "holistic_landmarker.task")
 BACKEND_URL = "http://localhost:8000/api/gestures/classify"
@@ -68,6 +70,7 @@ def capture_one_attempt():
                     "t": timestamp_ms / 1000.0,
                     "left_hand": landmarks_to_list(result.left_hand_landmarks),
                     "right_hand": landmarks_to_list(result.right_hand_landmarks),
+                    "body": upper_body_visible(result.pose_landmarks),
                 })
                 cv2.putText(frame, f"RECORDING ({len(frames)} frames)", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
