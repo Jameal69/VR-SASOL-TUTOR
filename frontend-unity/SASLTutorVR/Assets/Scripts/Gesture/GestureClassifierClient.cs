@@ -20,6 +20,29 @@ public class GestureClassifyResponse
     public string retry_reason;
 }
 
+/// <summary>Shape of the backend's /api/curriculum/catalog response (lesson browser).</summary>
+[Serializable]
+public class CatalogSign
+{
+    public string curriculum_item_id;
+    public string sign_name;
+    public string description;
+}
+
+[Serializable]
+public class CatalogLesson
+{
+    public string lesson_id;
+    public string title;
+    public CatalogSign[] signs;
+}
+
+[Serializable]
+public class CatalogResponse
+{
+    public CatalogLesson[] lessons;
+}
+
 /// <summary>
 /// Connects to landmark_streamer.py's socket, buffers hand frames while the
 /// player is "recording" an attempt, sends the sequence to the real backend's
@@ -32,26 +55,36 @@ public class GestureClassifyResponse
 /// LandmarkReceiver uses. Only ONE of them should be enabled at a time.
 /// Untick LandmarkReceiver in the Inspector when using this script.
 ///
-/// Per sign you test, set BOTH fields in the Inspector:
-///   curriculumItemId  (the sign's id from /api/curriculum/lessons)
-///   expectedSignName  (what the on-screen prompt and MATCH check use)
-/// Or press 1-4 in Play mode to switch between the Lesson 1 signs.
+/// Lesson browser (Play mode): the lessons and signs are loaded from the
+/// backend's /api/curriculum/catalog when Play starts, so no IDs need typing.
+///   Left/Right arrows (or [ and ])  previous / next lesson
+///   Up/Down arrows                  previous / next sign in the lesson
+///   1-9                             jump to that sign in the lesson
+/// If the backend isn't reachable, the built-in Lesson 1 list is used.
+/// The Inspector fields below set the starting sign.
 /// </summary>
 public class GestureClassifierClient : MonoBehaviour
 {
-    // Lesson 1 signs for the 1-4 keys (ids from the live curriculum_items table).
-    static readonly string[,] Lesson1Signs =
+    // Fallback when the backend's catalog can't be loaded (ids from the live curriculum_items table).
+    static List<CatalogLesson> BuiltInLessons() => new List<CatalogLesson>
     {
-        { "701d037f-2703-47a5-a09b-5eb3effa08f5", "Hello" },
-        { "fab6a4b5-d6ef-4166-afad-3aaa8503daed", "Goodbye" },
-        { "a99dfe87-1cbd-4700-a4da-ce2947b58ac3", "Please" },
-        { "8160b4f7-752e-4e60-b0f6-9565b890c080", "Thank You" },
+        new CatalogLesson
+        {
+            lesson_id = "", title = "Lesson 1: Introduction",
+            signs = new[]
+            {
+                new CatalogSign { curriculum_item_id = "701d037f-2703-47a5-a09b-5eb3effa08f5", sign_name = "Hello" },
+                new CatalogSign { curriculum_item_id = "fab6a4b5-d6ef-4166-afad-3aaa8503daed", sign_name = "Goodbye" },
+                new CatalogSign { curriculum_item_id = "a99dfe87-1cbd-4700-a4da-ce2947b58ac3", sign_name = "Please" },
+                new CatalogSign { curriculum_item_id = "8160b4f7-752e-4e60-b0f6-9565b890c080", sign_name = "Thank You" },
+            },
+        },
     };
 
     /// <summary>Fired on the main thread when the backend answers: (predicted sign, confidence 0-1, is MATCH).</summary>
     public event Action<string, float, bool> ResultReceived;
 
-    /// <summary>Fired when the target sign changes (1-4 keys), with the new sign name.</summary>
+    /// <summary>Fired when the target sign changes (lesson browser keys), with the new sign name.</summary>
     public event Action<string> TargetChanged;
 
     /// <summary>Fired instead of ResultReceived when tracking was too poor to judge the attempt, with a message for the user.</summary>
@@ -64,6 +97,13 @@ public class GestureClassifierClient : MonoBehaviour
     public string expectedSignName = "Hello";
 
     private const string BackendUrl = "http://localhost:8000/api/gestures/classify";
+    private const string CatalogUrl = "http://localhost:8000/api/curriculum/catalog";
+
+    // Lesson browser state (main thread only).
+    private List<CatalogLesson> lessons = BuiltInLessons();
+    private bool catalogFromBackend = false;
+    private int lessonIndex = 0;
+    private int signIndex = 0;
 
     private TcpClient client;
     private NetworkStream stream;
@@ -85,6 +125,53 @@ public class GestureClassifierClient : MonoBehaviour
         receiveThread = new Thread(ConnectAndListen);
         receiveThread.IsBackground = true;
         receiveThread.Start();
+
+        FindCurrentSign();
+        StartCoroutine(LoadCatalog());
+    }
+
+    System.Collections.IEnumerator LoadCatalog()
+    {
+        using (var request = UnityWebRequest.Get(CatalogUrl))
+        {
+            yield return request.SendWebRequest();
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("[GestureClassifierClient] Couldn't load lessons from the backend (" + request.error + "), using built-in Lesson 1.");
+                yield break;
+            }
+
+            CatalogResponse catalog = null;
+            try { catalog = JsonUtility.FromJson<CatalogResponse>(request.downloadHandler.text); }
+            catch (Exception e) { Debug.LogWarning("[GestureClassifierClient] Couldn't read the lesson catalog: " + e.Message); }
+
+            var loaded = new List<CatalogLesson>();
+            if (catalog != null && catalog.lessons != null)
+                foreach (var lesson in catalog.lessons)
+                    if (lesson.signs != null && lesson.signs.Length > 0) loaded.Add(lesson);
+            if (loaded.Count == 0) yield break;
+
+            lessons = loaded;
+            catalogFromBackend = true;
+            FindCurrentSign();
+            int signCount = 0;
+            foreach (var lesson in lessons) signCount += lesson.signs.Length;
+            Debug.Log("[GestureClassifierClient] Loaded " + lessons.Count + " lessons, " + signCount + " signs from the backend.");
+        }
+    }
+
+    // Points the browser at the sign set in the Inspector (curriculumItemId), if it's in the list.
+    void FindCurrentSign()
+    {
+        for (int l = 0; l < lessons.Count; l++)
+            for (int s = 0; s < lessons[l].signs.Length; s++)
+                if (lessons[l].signs[s].curriculum_item_id == curriculumItemId)
+                {
+                    lessonIndex = l;
+                    signIndex = s;
+                    expectedSignName = lessons[l].signs[s].sign_name;
+                    return;
+                }
     }
 
     void ConnectAndListen()
@@ -146,10 +233,23 @@ public class GestureClassifierClient : MonoBehaviour
 #endif
     }
 
-    // Returns 1-4 if that number key was pressed this frame, otherwise 0.
+    // Key names shared by the new Input System's Key and the old KeyCode
+    // (LeftArrow, RightArrow, UpArrow, DownArrow, LeftBracket, RightBracket).
+    bool PressedThisFrame(string keyName)
+    {
+#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+        var keyboard = UnityEngine.InputSystem.Keyboard.current;
+        return keyboard != null
+            && keyboard[(UnityEngine.InputSystem.Key)Enum.Parse(typeof(UnityEngine.InputSystem.Key), keyName)].wasPressedThisFrame;
+#else
+        return Input.GetKeyDown((KeyCode)Enum.Parse(typeof(KeyCode), keyName));
+#endif
+    }
+
+    // Returns 1-9 if that number key was pressed this frame, otherwise 0.
     int SignKeyPressedThisFrame()
     {
-        for (int i = 1; i <= 4; i++)
+        for (int i = 1; i <= 9; i++)
         {
 #if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
             var keyboard = UnityEngine.InputSystem.Keyboard.current;
@@ -165,24 +265,42 @@ public class GestureClassifierClient : MonoBehaviour
         return 0;
     }
 
-    void SelectSign(int index)
+    // Selects a sign by lesson and position; both wrap around.
+    void SelectSign(int lesson, int sign)
     {
-        curriculumItemId = Lesson1Signs[index, 0];
-        expectedSignName = Lesson1Signs[index, 1];
+        if (lessons.Count == 0) return;
+        lessonIndex = (lesson % lessons.Count + lessons.Count) % lessons.Count;
+        var signs = lessons[lessonIndex].signs;
+        signIndex = (sign % signs.Length + signs.Length) % signs.Length;
+
+        curriculumItemId = signs[signIndex].curriculum_item_id;
+        expectedSignName = signs[signIndex].sign_name;
         lastWasMatch = null;
         resultText = "";
         statusText = "Switched to " + expectedSignName + ". Press SPACE to start recording";
-        Debug.Log("[GestureClassifierClient] Target sign: " + expectedSignName);
+        Debug.Log("[GestureClassifierClient] Target sign: " + lessons[lessonIndex].title + " / " + expectedSignName);
         TargetChanged?.Invoke(expectedSignName);
+    }
+
+    void HandleLessonBrowserKeys()
+    {
+        if (isRecording) return;
+
+        if (PressedThisFrame("RightArrow") || PressedThisFrame("RightBracket")) SelectSign(lessonIndex + 1, 0);
+        else if (PressedThisFrame("LeftArrow") || PressedThisFrame("LeftBracket")) SelectSign(lessonIndex - 1, 0);
+        else if (PressedThisFrame("DownArrow")) SelectSign(lessonIndex, signIndex + 1);
+        else if (PressedThisFrame("UpArrow")) SelectSign(lessonIndex, signIndex - 1);
+        else
+        {
+            int signKey = SignKeyPressedThisFrame();
+            if (signKey > 0 && signKey <= lessons[lessonIndex].signs.Length)
+                SelectSign(lessonIndex, signKey - 1);
+        }
     }
 
     void Update()
     {
-        int signKey = SignKeyPressedThisFrame();
-        if (signKey > 0 && !isRecording)
-        {
-            SelectSign(signKey - 1);
-        }
+        HandleLessonBrowserKeys();
 
         if (!isRecording && !streamConnected)
         {
@@ -310,6 +428,9 @@ public class GestureClassifierClient : MonoBehaviour
                 case "too_short":
                     message = "That was too short. Hold the sign for about 1-2 seconds, then press SPACE.";
                     break;
+                case "sign_not_trained":
+                    message = "This sign can't be checked yet (no reference recordings). Press D to watch the avatar sign it.";
+                    break;
                 default:
                     message = "Couldn't see you clearly. Keep your head and both shoulders in view and try again.";
                     break;
@@ -343,19 +464,26 @@ public class GestureClassifierClient : MonoBehaviour
         style.wordWrap = true;
         style.normal.textColor = Color.white;
 
-        GUI.Box(new Rect(10, 10, 880, 190), GUIContent.none);
-        GUI.Label(new Rect(25, 15, 850, 40), "Sign to perform: " + expectedSignName + "   (keys 1-4 to change)", style);
-        GUI.Label(new Rect(25, 55, 850, 70), statusText, style);
+        GUIStyle small = new GUIStyle(style) { fontSize = 18, fontStyle = FontStyle.Normal };
+        var lesson = lessons[lessonIndex];
+        string lessonLine = lesson.title + "   (sign " + (signIndex + 1) + " of " + lesson.signs.Length + ")"
+            + (catalogFromBackend ? "" : "   [backend offline: Lesson 1 only]");
+
+        GUI.Box(new Rect(10, 10, 880, 250), GUIContent.none);
+        GUI.Label(new Rect(25, 15, 850, 28), lessonLine, small);
+        GUI.Label(new Rect(25, 43, 850, 24), "Left/Right: lesson    Up/Down or 1-9: sign    D: watch the avatar    SPACE: record", small);
+        GUI.Label(new Rect(25, 75, 850, 40), "Sign to perform: " + expectedSignName, style);
+        GUI.Label(new Rect(25, 115, 850, 70), statusText, style);
 
         if (!string.IsNullOrEmpty(resultText))
         {
-            GUI.Label(new Rect(25, 130, 850, 35), resultText, style);
+            GUI.Label(new Rect(25, 190, 850, 35), resultText, style);
         }
 
         if (lastWasMatch.HasValue)
         {
             style.normal.textColor = lastWasMatch.Value ? Color.green : Color.red;
-            GUI.Label(new Rect(25, 160, 850, 35), lastWasMatch.Value ? "MATCH" : "NO MATCH", style);
+            GUI.Label(new Rect(25, 220, 850, 35), lastWasMatch.Value ? "MATCH" : "NO MATCH", style);
         }
     }
 

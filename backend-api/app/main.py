@@ -14,6 +14,7 @@ from sqlalchemy import func
 from app.database import Base, engine, get_db
 from app import models, schemas, auth
 from app import gesture_classifier
+from app import curriculum_data
 
 # Creates tables if they don't exist yet. Fine for early dev; swap for Alembic
 # migrations once the schema stabilises (see database/ folder for migrations later).
@@ -133,6 +134,33 @@ def list_lessons(
     return schemas.LessonListResponse(lessons=result)
 
 
+@app.get("/api/curriculum/catalog", response_model=schemas.CatalogResponse)
+def curriculum_catalog(db: DBSession = Depends(get_db)):
+    """
+    Every lesson with its signs and their IDs, for the Unity lesson browser.
+    Public and read-only (curriculum content only, no user data), so Unity
+    doesn't need a login. Signs keep the order they have in curriculum_data
+    (Lesson 1: Hello, Goodbye, Please, Thank You), not database order.
+    """
+    order = {
+        lesson["title"]: {item["sign_name"]: i for i, item in enumerate(lesson["curriculum_items"])}
+        for lesson in curriculum_data.CURRICULUM
+    }
+    result = []
+    for lesson in db.query(models.Lesson).order_by(models.Lesson.order_index).all():
+        position = order.get(lesson.title, {})
+        items = sorted(lesson.curriculum_items, key=lambda it: (position.get(it.sign_name, len(position)), it.sign_name))
+        result.append(schemas.CatalogLesson(
+            lesson_id=lesson.id,
+            title=lesson.title,
+            signs=[
+                schemas.CatalogSign(curriculum_item_id=it.id, sign_name=it.sign_name, description=it.description)
+                for it in items
+            ],
+        ))
+    return schemas.CatalogResponse(lessons=result)
+
+
 @app.get("/api/curriculum/lessons/{lesson_id}", response_model=schemas.LessonDetailResponse)
 def get_lesson(lesson_id: str, db: DBSession = Depends(get_db)):
     lesson = db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()
@@ -200,6 +228,11 @@ def classify_gesture(payload: schemas.GestureClassifyRequest, db: DBSession = De
 
     sign_label = item.sign_name.lower().replace(" ", "_")
     landmark_frames = [frame.model_dump() for frame in payload.landmark_sequence]
+
+    # Signs without reference recordings yet (e.g. new letters) can't be judged:
+    # say so, rather than a NO MATCH that blames the learner.
+    if not gesture_classifier.has_references(sign_label):
+        return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0, retry_reason="sign_not_trained")
 
     # Poor tracking (head/shoulders out of frame, hand lost) distorts the hand
     # landmarks, so ask for a retry instead of returning a misleading NO MATCH.
