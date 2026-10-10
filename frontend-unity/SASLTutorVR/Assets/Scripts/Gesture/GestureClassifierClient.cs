@@ -32,9 +32,25 @@ public class GestureClassifyResponse
 /// Per sign you test, set BOTH fields in the Inspector:
 ///   curriculumItemId  (the sign's id from /api/curriculum/lessons)
 ///   expectedSignName  (what the on-screen prompt and MATCH check use)
+/// Or press 1-4 in Play mode to switch between the Lesson 1 signs.
 /// </summary>
 public class GestureClassifierClient : MonoBehaviour
 {
+    // Lesson 1 signs for the 1-4 keys (ids from the live curriculum_items table).
+    static readonly string[,] Lesson1Signs =
+    {
+        { "701d037f-2703-47a5-a09b-5eb3effa08f5", "Hello" },
+        { "fab6a4b5-d6ef-4166-afad-3aaa8503daed", "Goodbye" },
+        { "a99dfe87-1cbd-4700-a4da-ce2947b58ac3", "Please" },
+        { "8160b4f7-752e-4e60-b0f6-9565b890c080", "Thank You" },
+    };
+
+    /// <summary>Fired on the main thread when the backend answers: (predicted sign, confidence 0-1, is MATCH).</summary>
+    public event Action<string, float, bool> ResultReceived;
+
+    /// <summary>Fired when the target sign changes (1-4 keys), with the new sign name.</summary>
+    public event Action<string> TargetChanged;
+
     [Tooltip("Real curriculum_item_id for the sign you're testing (from /api/curriculum/lessons in /docs).")]
     public string curriculumItemId = "701d037f-2703-47a5-a09b-5eb3effa08f5";
 
@@ -124,8 +140,44 @@ public class GestureClassifierClient : MonoBehaviour
 #endif
     }
 
+    // Returns 1-4 if that number key was pressed this frame, otherwise 0.
+    int SignKeyPressedThisFrame()
+    {
+        for (int i = 1; i <= 4; i++)
+        {
+#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard == null) return 0;
+            if (keyboard[UnityEngine.InputSystem.Key.Digit1 + (i - 1)].wasPressedThisFrame
+                || keyboard[UnityEngine.InputSystem.Key.Numpad1 + (i - 1)].wasPressedThisFrame)
+                return i;
+#else
+            if (Input.GetKeyDown(KeyCode.Alpha0 + i) || Input.GetKeyDown(KeyCode.Keypad0 + i))
+                return i;
+#endif
+        }
+        return 0;
+    }
+
+    void SelectSign(int index)
+    {
+        curriculumItemId = Lesson1Signs[index, 0];
+        expectedSignName = Lesson1Signs[index, 1];
+        lastWasMatch = null;
+        resultText = "";
+        statusText = "Switched to " + expectedSignName + ". Press SPACE to start recording";
+        Debug.Log("[GestureClassifierClient] Target sign: " + expectedSignName);
+        TargetChanged?.Invoke(expectedSignName);
+    }
+
     void Update()
     {
+        int signKey = SignKeyPressedThisFrame();
+        if (signKey > 0 && !isRecording)
+        {
+            SelectSign(signKey - 1);
+        }
+
         if (!isRecording && !streamConnected)
         {
             statusText = "Camera stream NOT connected. Start landmark_streamer.py first, then press Play.";
@@ -236,6 +288,7 @@ public class GestureClassifierClient : MonoBehaviour
             resultText = "No sign recognised";
             lastWasMatch = false;
             statusText = "Done. Press SPACE to try again";
+            ResultReceived?.Invoke("unknown", 0f, false);
             return;
         }
 
@@ -243,6 +296,7 @@ public class GestureClassifierClient : MonoBehaviour
         resultText = "Detected: " + parsed.predicted_sign + " (" + percent + "%)";
         lastWasMatch = Normalise(parsed.predicted_sign) == Normalise(expectedSignName);
         statusText = "Done. Press SPACE to try again";
+        ResultReceived?.Invoke(parsed.predicted_sign, parsed.confidence_score, lastWasMatch.Value);
     }
 
     static string Normalise(string s)
@@ -260,7 +314,7 @@ public class GestureClassifierClient : MonoBehaviour
         style.normal.textColor = Color.white;
 
         GUI.Box(new Rect(10, 10, 880, 190), GUIContent.none);
-        GUI.Label(new Rect(25, 15, 850, 40), "Sign to perform: " + expectedSignName, style);
+        GUI.Label(new Rect(25, 15, 850, 40), "Sign to perform: " + expectedSignName + "   (keys 1-4 to change)", style);
         GUI.Label(new Rect(25, 55, 850, 70), statusText, style);
 
         if (!string.IsNullOrEmpty(resultText))
