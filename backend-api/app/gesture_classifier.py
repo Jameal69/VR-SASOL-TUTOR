@@ -169,9 +169,10 @@ def _dtw_distance(seq_a, seq_b):
     return float(cost[n, m] / (n + m))
 
 
-def _load_all_sign_distances(sequence):
+def _load_all_sign_distances(sequence, allowed_signs=None):
     """Compares the live sequence against every sign that has reference
-    recordings on disk, not just one. Returns {sign_name: [distance, ...]}."""
+    recordings on disk, not just one. Returns {sign_name: [distance, ...]}.
+    If allowed_signs is given, only those signs are compared (lesson scoping)."""
     all_distances = {}
     if not os.path.isdir(REFERENCES_DIR):
         return all_distances
@@ -179,6 +180,8 @@ def _load_all_sign_distances(sequence):
     for entry in sorted(os.listdir(REFERENCES_DIR)):
         sign_dir = os.path.join(REFERENCES_DIR, entry)
         if not os.path.isdir(sign_dir):
+            continue
+        if allowed_signs is not None and entry not in allowed_signs:
             continue
 
         refs = []
@@ -194,7 +197,10 @@ def _load_all_sign_distances(sequence):
     return all_distances
 
 
-def classify_sequence(landmark_sequence, sign_label):
+def classify_sequence(landmark_sequence, sign_label, allowed_signs=None):
+    """allowed_signs: optional list of sign labels to compare against, e.g. the
+    signs in the target's lesson, so a "2" in the numbers lesson can't lose to
+    a "V" from the alphabet. None = compare against every recorded sign."""
     raw = np.array(
         [_raw_frame(frame.get("left_hand", []), frame.get("right_hand", [])) for frame in landmark_sequence],
         dtype=np.float32,
@@ -207,12 +213,14 @@ def classify_sequence(landmark_sequence, sign_label):
     if len(sequence) < 3:
         return "unknown", 0.0
 
-    all_sign_distances = _load_all_sign_distances(sequence)
+    all_sign_distances = _load_all_sign_distances(sequence, allowed_signs)
 
     if sign_label not in all_sign_distances:
         return "unknown", 0.0
 
     if DEBUG_PRINT_DISTANCES:
+        if allowed_signs is not None:
+            print(f"[gesture_classifier] comparing within lesson: {', '.join(sorted(allowed_signs))}")
         print(f"[gesture_classifier] Live attempt, checking against '{sign_label}':")
         for sign, dists in all_sign_distances.items():
             avg = sum(dists) / len(dists)
