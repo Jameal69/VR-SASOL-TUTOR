@@ -88,6 +88,9 @@ class LandmarkFrame(BaseModel):
     t: float
     left_hand: List[List[float]] = []
     right_hand: List[List[float]] = []
+    # True when the head and both shoulders were clearly in view (sent by
+    # landmark_streamer.py). None from older clients, which skips the check.
+    body: Optional[bool] = None
 
 
 class GestureClassifyRequest(BaseModel):
@@ -99,6 +102,10 @@ class GestureClassifyRequest(BaseModel):
 class GestureClassifyResponse(BaseModel):
     predicted_sign: str
     confidence_score: float
+    # Set when the attempt wasn't classified because tracking was too poor
+    # ("body_not_visible" / "hand_not_visible" / "too_short"): ask the user to try again
+    # instead of showing NO MATCH. None for a normal result.
+    retry_reason: Optional[str] = None
 
 
 class GestureCreateRequest(BaseModel):

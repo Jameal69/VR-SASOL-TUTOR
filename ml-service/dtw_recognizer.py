@@ -22,6 +22,8 @@ import mediapipe as mp
 from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.core.base_options import BaseOptions
 
+from landmark_streamer import upper_body_visible
+
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/holistic_landmarker/"
     "holistic_landmarker/float16/1/holistic_landmarker.task"
@@ -64,10 +66,11 @@ def frame_to_raw_vector(result):
 
 def capture_sequence(cap, landmarker, start_time, window_title):
     """Show the webcam feed. Press SPACE to start recording frames, SPACE
-    again to stop. Returns the recorded sequence as a list of raw frame
-    vectors, or None if the user quit instead."""
+    again to stop. Returns (frames, body_flags): the raw frame vectors plus,
+    per frame, whether head + shoulders were in view. None if the user quit."""
     recording = False
     frames = []
+    body_flags = []
 
     print("Press SPACE to start recording, SPACE again to stop, 'q' to quit.")
     while True:
@@ -81,8 +84,10 @@ def capture_sequence(cap, landmarker, start_time, window_title):
         timestamp_ms = int((time.time() - start_time) * 1000)
         result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
+        body_ok = upper_body_visible(result.pose_landmarks)
         if recording:
             frames.append(frame_to_raw_vector(result))
+            body_flags.append(body_ok)
             cv2.putText(frame, f"RECORDING ({len(frames)} frames)", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         else:
@@ -95,6 +100,8 @@ def capture_sequence(cap, landmarker, start_time, window_title):
                                            ("RIGHT hand", result.right_hand_landmarks))):
             cv2.putText(frame, label if seen else label.lower() + " lost", (10, 60 + 28 * i),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 0) if seen else (0, 0, 255), 2)
+        cv2.putText(frame, "HEAD + SHOULDERS OK" if body_ok else "Keep head + both shoulders in view",
+                    (10, 116), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 0) if body_ok else (0, 0, 255), 2)
 
         cv2.imshow(window_title, frame)
         key = cv2.waitKey(1) & 0xFF
@@ -103,9 +110,10 @@ def capture_sequence(cap, landmarker, start_time, window_title):
             if not recording:
                 recording = True
                 frames = []
+                body_flags = []
             else:
                 # Stopped - hand this recording back to the caller.
-                return frames
+                return frames, body_flags
         elif key == ord("q"):
             return None
 
@@ -124,10 +132,11 @@ def run_record(label):
     rep_index = max(numbers) + 1 if numbers else 0
     with vision.HolisticLandmarker.create_from_options(make_options()) as landmarker:
         while True:
-            sequence = capture_sequence(cap, landmarker, start_time,
-                                         f"Recording '{label}' - SPACE to start/stop, q to quit")
-            if sequence is None:
+            captured = capture_sequence(cap, landmarker, start_time,
+                                        f"Recording '{label}' - SPACE to start/stop, q to quit")
+            if captured is None:
                 break
+            sequence, body_flags = captured
             if len(sequence) < 3:
                 print("Recording too short, discarded - try again.")
                 continue
@@ -137,7 +146,12 @@ def run_record(label):
             np.save(out_path, arr)
             left_pct = float(np.mean(np.any(arr[:, :63] != 0, axis=1))) * 100
             right_pct = float(np.mean(np.any(arr[:, 63:] != 0, axis=1))) * 100
-            print(f"Saved {out_path} ({len(sequence)} frames, left={left_pct:.0f}% right={right_pct:.0f}%)")
+            body_pct = 100.0 * sum(body_flags) / len(body_flags)
+            print(f"Saved {out_path} ({len(sequence)} frames, left={left_pct:.0f}% right={right_pct:.0f}% "
+                  f"head+shoulders={body_pct:.0f}%)")
+            if body_pct < 80:
+                print("  ^ head/shoulders were out of view too often: hand points may be distorted. "
+                      "Consider deleting this rep and recording it again.")
             rep_index += 1
 
     cap.release()
@@ -160,21 +174,28 @@ def run_compare(label):
     start_time = time.time()
 
     with vision.HolisticLandmarker.create_from_options(make_options()) as landmarker:
-        sequence = capture_sequence(cap, landmarker, start_time,
-                                     f"Testing against '{label}' - SPACE to start/stop, q to quit")
+        captured = capture_sequence(cap, landmarker, start_time,
+                                    f"Testing against '{label}' - SPACE to start/stop, q to quit")
 
     cap.release()
     cv2.destroyAllWindows()
 
-    if not sequence or len(sequence) < 3:
+    if not captured or len(captured[0]) < 3:
         print("No usable attempt captured.")
         return
+    sequence, body_flags = captured
 
     # Same shape of data the backend gets from Unity.
     frames = [{"left_hand": np.asarray(f[:63]).reshape(21, 3).tolist() if np.any(f[:63]) else [],
-               "right_hand": np.asarray(f[63:]).reshape(21, 3).tolist() if np.any(f[63:]) else []}
-              for f in sequence]
+               "right_hand": np.asarray(f[63:]).reshape(21, 3).tolist() if np.any(f[63:]) else [],
+               "body": body}
+              for f, body in zip(sequence, body_flags)]
     gesture_classifier.DEBUG_PRINT_DISTANCES = True
+    problem = gesture_classifier.tracking_problem(frames)
+    if problem:
+        print(f"\nPLEASE RETRY ({problem}): keep your head, both shoulders and your hand in view, "
+              f"and hold the sign for about 1-2 seconds.")
+        return
     predicted, confidence = gesture_classifier.classify_sequence(frames, label)
 
     print(f"\nConfidence: {confidence:.0%}")

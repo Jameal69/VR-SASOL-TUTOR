@@ -41,6 +41,21 @@ def landmarks_to_list(landmarks):
     return [[round(lm.x, 4), round(lm.y, 4), round(lm.z, 4)] for lm in landmarks]
 
 
+def upper_body_visible(pose_landmarks):
+    """True when the nose and both shoulders are detected, confident and inside
+    the frame. Holistic finds the hands via the body pose, so if these slip out
+    of view the hand landmarks get distorted even when the hand is visible."""
+    if not pose_landmarks:
+        return False
+    for index in (0, 11, 12):  # nose, left shoulder, right shoulder
+        lm = pose_landmarks[index]
+        if lm.visibility is not None and lm.visibility < 0.5:
+            return False
+        if not (0.0 <= lm.x <= 1.0 and 0.0 <= lm.y <= 1.0):
+            return False
+    return True
+
+
 def wait_for_unity_connection():
     """Open a TCP server socket and block until Unity connects to it.
     Using a single blocking accept() is deliberately simple for this proof
@@ -49,9 +64,18 @@ def wait_for_unity_connection():
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
     server_socket.listen(1)
-    print(f"Waiting for Unity to connect on {HOST}:{PORT} ...")
+    print(f"Waiting for Unity to connect on {HOST}:{PORT} ... (Ctrl+C to quit)")
 
-    client_socket, addr = server_socket.accept()
+    # A plain blocking accept() never sees Ctrl+C on Windows, so wait in
+    # 1-second slices to give KeyboardInterrupt a chance to fire.
+    server_socket.settimeout(1.0)
+    while True:
+        try:
+            client_socket, addr = server_socket.accept()
+            break
+        except socket.timeout:
+            continue
+    client_socket.settimeout(None)  # back to normal blocking sends
     print(f"Unity connected from {addr}.")
     return server_socket, client_socket
 
@@ -95,10 +119,13 @@ def main():
                 # Build one JSON message per frame. Sending both hands every
                 # frame, even if empty, keeps the message shape consistent -
                 # easier for Unity to parse than a shape that changes.
+                body_ok = upper_body_visible(result.pose_landmarks)
                 message = {
                     "t": timestamp_ms,
                     "left_hand": landmarks_to_list(result.left_hand_landmarks),
                     "right_hand": landmarks_to_list(result.right_hand_landmarks),
+                    # Backend asks for a retry when this is False too often.
+                    "body": body_ok,
                 }
 
                 # Newline-delimited JSON: one full JSON object per line, so
@@ -107,8 +134,10 @@ def main():
 
                 try:
                     client_socket.sendall(payload)
-                except (BrokenPipeError, ConnectionResetError):
-                    print("Unity disconnected.")
+                except ConnectionError:
+                    # Covers every way Unity can drop the socket (stopping Play
+                    # gives WinError 10053 / ConnectionAbortedError on Windows).
+                    print("Unity disconnected (Play stopped). Restart this script before pressing Play again.")
                     break
 
                 # Local preview window, same as the spike script - handy for
@@ -124,7 +153,7 @@ def main():
                         cv2.circle(frame, (int(lm.x * w), int(lm.y * h)), 3, colour, -1)
                 preview = cv2.flip(frame, 1)
                 status = [
-                    ("BODY found" if result.pose_landmarks else "BODY NOT found", bool(result.pose_landmarks)),
+                    ("HEAD + SHOULDERS OK" if body_ok else "Keep head + both shoulders in view", body_ok),
                     ("LEFT hand" if result.left_hand_landmarks else "left hand lost", bool(result.left_hand_landmarks)),
                     ("RIGHT hand" if result.right_hand_landmarks else "right hand lost", bool(result.right_hand_landmarks)),
                 ]
@@ -142,4 +171,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nStopped.")

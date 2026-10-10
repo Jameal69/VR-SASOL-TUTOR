@@ -15,6 +15,9 @@ public class GestureClassifyResponse
 {
     public string predicted_sign;
     public float confidence_score;
+    // Set by the backend when tracking was too poor to classify
+    // ("body_not_visible" / "hand_not_visible" / "too_short"). Empty for a normal result.
+    public string retry_reason;
 }
 
 /// <summary>
@@ -50,6 +53,9 @@ public class GestureClassifierClient : MonoBehaviour
 
     /// <summary>Fired when the target sign changes (1-4 keys), with the new sign name.</summary>
     public event Action<string> TargetChanged;
+
+    /// <summary>Fired instead of ResultReceived when tracking was too poor to judge the attempt, with a message for the user.</summary>
+    public event Action<string> RetryRequested;
 
     [Tooltip("Real curriculum_item_id for the sign you're testing (from /api/curriculum/lessons in /docs).")]
     public string curriculumItemId = "701d037f-2703-47a5-a09b-5eb3effa08f5";
@@ -289,6 +295,30 @@ public class GestureClassifierClient : MonoBehaviour
             lastWasMatch = false;
             statusText = "Done. Press SPACE to try again";
             ResultReceived?.Invoke("unknown", 0f, false);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(parsed.retry_reason))
+        {
+            // Not a wrong sign: the camera couldn't see well enough to judge it.
+            string message;
+            switch (parsed.retry_reason)
+            {
+                case "hand_not_visible":
+                    message = "Couldn't see your hand clearly. Keep your signing hand in view and try again.";
+                    break;
+                case "too_short":
+                    message = "That was too short. Hold the sign for about 1-2 seconds, then press SPACE.";
+                    break;
+                default:
+                    message = "Couldn't see you clearly. Keep your head and both shoulders in view and try again.";
+                    break;
+            }
+            resultText = message;
+            lastWasMatch = null;
+            statusText = "Press SPACE to try again";
+            Debug.Log("[GestureClassifierClient] Retry requested: " + parsed.retry_reason);
+            RetryRequested?.Invoke(message);
             return;
         }
 

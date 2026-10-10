@@ -201,6 +201,12 @@ def classify_gesture(payload: schemas.GestureClassifyRequest, db: DBSession = De
     sign_label = item.sign_name.lower().replace(" ", "_")
     landmark_frames = [frame.model_dump() for frame in payload.landmark_sequence]
 
+    # Poor tracking (head/shoulders out of frame, hand lost) distorts the hand
+    # landmarks, so ask for a retry instead of returning a misleading NO MATCH.
+    problem = gesture_classifier.tracking_problem(landmark_frames)
+    if problem:
+        return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0, retry_reason=problem)
+
     # Lesson scoping: only compare against signs from the same lesson, so e.g.
     # a flat-hand letter can't beat Hello once the alphabet has recordings.
     lesson_signs = db.query(models.CurriculumItem.sign_name).filter(

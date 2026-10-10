@@ -31,6 +31,18 @@ REFERENCES_DIR = os.path.join(
 # From live tests on 2026-09-25 (shape-only + gap fill): correct attempts were
 # <= 1.41 to every reference of their sign, wrong-sign attempts >= ~1.5.
 MATCH_THRESHOLD = 1.5
+
+# Tracking-quality gate, checked before classifying. MediaPipe Holistic finds
+# the hands via the body pose, so when a shoulder or the head leaves the frame
+# the hand landmarks come back distorted and EVERY sign scores far away (seen
+# live: all distances ~2.5). Such attempts get "please retry", not NO MATCH.
+# Starting values; tune from the debug print below.
+MIN_BODY_VISIBLE = 0.8   # fraction of frames with head + both shoulders in view
+MIN_HAND_VISIBLE = 0.3   # fraction of frames with at least one hand detected
+# Very short attempts (or ones where the hand was mostly lost) gave unreliable
+# results live: on 10 Oct the attempts with 4-5 hand frames failed, while every
+# successful one had 8+. Fewer than this many hand frames -> "too_short" retry.
+MIN_HAND_FRAMES = 8
 VOTE_FRACTION = 0.5
 
 # TEMPORARY: prints real distance numbers for every classification, so we can
@@ -195,6 +207,32 @@ def _load_all_sign_distances(sequence, allowed_signs=None):
             all_distances[entry] = [_dtw_distance(sequence, ref) for ref in refs]
 
     return all_distances
+
+
+def tracking_problem(landmark_sequence):
+    """Returns "body_not_visible", "hand_not_visible", "too_short", or None if
+    tracking was good enough to classify. Frames without a "body" flag (older
+    clients) skip the body check."""
+    if not landmark_sequence:
+        return "hand_not_visible"
+
+    hand_frames = sum(1 for f in landmark_sequence if f.get("left_hand") or f.get("right_hand"))
+    hand_pct = hand_frames / len(landmark_sequence)
+    body_flags = [f.get("body") for f in landmark_sequence if f.get("body") is not None]
+    body_pct = sum(1 for b in body_flags if b) / len(body_flags) if body_flags else None
+
+    if DEBUG_PRINT_DISTANCES:
+        body_text = f"{body_pct * 100:.0f}%" if body_pct is not None else "n/a (old client)"
+        print(f"[gesture_classifier] tracking: hand visible {hand_pct * 100:.0f}% ({hand_frames} frames), "
+              f"head+shoulders visible {body_text}")
+
+    if body_pct is not None and body_pct < MIN_BODY_VISIBLE:
+        return "body_not_visible"
+    if hand_pct < MIN_HAND_VISIBLE:
+        return "hand_not_visible"
+    if hand_frames < MIN_HAND_FRAMES:
+        return "too_short"
+    return None
 
 
 def classify_sequence(landmark_sequence, sign_label, allowed_signs=None):
