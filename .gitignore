@@ -33,3 +33,6 @@ Thumbs.db
 ml-service/holistic_landmarker.task
 
 
+
+# Sign preview pictures from SASL > Render Sign Previews (regenerate locally)
+frontend-unity/SASLTutorVR/SignPreviews/

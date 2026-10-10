@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1423fceac73a0541a413e8f2819fd98, type: 3}
+  m_Name: SignLibrary
+  m_EditorClassIdentifier: Assembly-CSharp::SignLibrary
+  entries:
+  - sign: goodbye
+    clip: {fileID: 7400000, guid: e3a8a3acc58863e4cbe5e7cdaad67116, type: 2}
+    handmade: 0
+  - sign: hello
+    clip: {fileID: -4572650651892053679, guid: d11f63e40e1bf2f4eb02e1b724d894f7, type: 3}
+    handmade: 1
+  - sign: please
+    clip: {fileID: 7400000, guid: 71711a7abd613414d97c8cc7f6994a2b, type: 2}
+    handmade: 0
+  - sign: thank_you
+    clip: {fileID: 7400000, guid: 87a86cebdaaceeb4a978030dcbcdaf62, type: 2}
+    handmade: 0
