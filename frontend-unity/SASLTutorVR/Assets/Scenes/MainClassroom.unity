@@ -1510,8 +1510,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4ba50a73fed44f46870bfc5dee6d9c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GestureClassifierClient
-  curriculumItemId: 701d037f-2703-47a5-a09b-5eb3effa08f5
-  expectedSignName: Hello
+  curriculumItemId: fab6a4b5-d6ef-4166-afad-3aaa8503daed
+  expectedSignName: Goodbye
 --- !u!1 &1300803427
 GameObject:
   m_ObjectHideFlags: 0
