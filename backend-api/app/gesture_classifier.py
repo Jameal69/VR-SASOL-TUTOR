@@ -234,6 +234,12 @@ def sign_score(distances):
     return sum(counted) / len(counted)
 
 
+def has_references(sign_label):
+    """True if at least one reference recording exists for this sign."""
+    sign_dir = os.path.join(REFERENCES_DIR, sign_label)
+    return os.path.isdir(sign_dir) and any(f.endswith(".npy") for f in os.listdir(sign_dir))
+
+
 def tracking_problem(landmark_sequence):
     """Returns "body_not_visible", "hand_not_visible", "too_short", or None if
     tracking was good enough to classify. Frames without a "body" flag (older

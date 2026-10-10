@@ -67,6 +67,23 @@ class LessonDetailResponse(BaseModel):
     signs: List[CurriculumItemDetail]
 
 
+# Public, read-only lesson browser data for the Unity client (no user progress).
+class CatalogSign(BaseModel):
+    curriculum_item_id: str
+    sign_name: str
+    description: Optional[str] = None
+
+
+class CatalogLesson(BaseModel):
+    lesson_id: str
+    title: str
+    signs: List[CatalogSign]
+
+
+class CatalogResponse(BaseModel):
+    lessons: List[CatalogLesson]
+
+
 # ---- Sessions ----
 class SessionStartRequest(BaseModel):
     lesson_id: str
@@ -104,6 +121,7 @@ class GestureClassifyResponse(BaseModel):
     confidence_score: float
     # Set when the attempt wasn't classified because tracking was too poor
     # ("body_not_visible" / "hand_not_visible" / "too_short"): ask the user to try again
+    # ("sign_not_trained": no reference recordings for this sign yet, so it can't be checked)
     # instead of showing NO MATCH. None for a normal result.
     retry_reason: Optional[str] = None
 
