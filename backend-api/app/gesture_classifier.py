@@ -38,6 +38,18 @@ MATCH_THRESHOLD = 1.5
 # live: all distances ~2.5). Such attempts get "please retry", not NO MATCH.
 # Starting values; tune from the debug print below.
 MIN_BODY_VISIBLE = 0.8   # fraction of frames with head + both shoulders in view
+
+# How each sign's references are combined into one score.
+#   "all"    - average and vote over EVERY reference of the sign (current
+#              behaviour; tuned on one signer's recordings).
+#   "best_k" - only the BEST_K closest references count. Use this once
+#              recordings from several signers are merged: an attempt only needs
+#              to resemble the few references made by people who sign like the
+#              learner, instead of being outvoted by everyone else's style.
+# Switch only after check_references.py --scoring best_k and a live test
+# (see docs/volunteer-recordings.md).
+SCORING = "all"
+BEST_K = 3
 MIN_HAND_VISIBLE = 0.3   # fraction of frames with at least one hand detected
 # Very short attempts (or ones where the hand was mostly lost) gave unreliable
 # results live: on 10 Oct the attempts with 4-5 hand frames failed, while every
@@ -209,6 +221,19 @@ def _load_all_sign_distances(sequence, allowed_signs=None):
     return all_distances
 
 
+def _scoring_distances(distances):
+    """The distances that count for a sign under the current SCORING mode."""
+    if SCORING == "best_k":
+        return sorted(distances)[:BEST_K]
+    return list(distances)
+
+
+def sign_score(distances):
+    """One number per sign: the average of its counted distances (lower = closer)."""
+    counted = _scoring_distances(distances)
+    return sum(counted) / len(counted)
+
+
 def tracking_problem(landmark_sequence):
     """Returns "body_not_visible", "hand_not_visible", "too_short", or None if
     tracking was good enough to classify. Frames without a "body" flag (older
@@ -259,20 +284,20 @@ def classify_sequence(landmark_sequence, sign_label, allowed_signs=None):
     if DEBUG_PRINT_DISTANCES:
         if allowed_signs is not None:
             print(f"[gesture_classifier] comparing within lesson: {', '.join(sorted(allowed_signs))}")
-        print(f"[gesture_classifier] Live attempt, checking against '{sign_label}':")
+        mode = f"best {BEST_K}" if SCORING == "best_k" else "all refs"
+        print(f"[gesture_classifier] Live attempt, checking against '{sign_label}' (scoring: {mode}):")
         for sign, dists in all_sign_distances.items():
-            avg = sum(dists) / len(dists)
             marker = "  <-- target" if sign == sign_label else ""
             rounded = [round(float(d), 3) for d in dists]
-            print(f"    {sign}: avg={avg:.3f}  distances={rounded}{marker}")
+            print(f"    {sign}: avg={sign_score(dists):.3f}  distances={rounded}{marker}")
 
-    target_distances = all_sign_distances[sign_label]
+    target_distances = _scoring_distances(all_sign_distances[sign_label])
     votes = sum(1 for d in target_distances if d <= MATCH_THRESHOLD)
     confidence = votes / len(target_distances)
 
-    target_avg = sum(target_distances) / len(target_distances)
+    target_avg = sign_score(all_sign_distances[sign_label])
     other_averages = [
-        sum(dists) / len(dists)
+        sign_score(dists)
         for sign, dists in all_sign_distances.items()
         if sign != sign_label
     ]

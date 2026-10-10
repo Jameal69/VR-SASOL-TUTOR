@@ -11,16 +11,31 @@ those signs apart, no matter what threshold we pick.
 
 Runs once per TRAJECTORY_WEIGHT (0 = hand shape only), so you can see how
 much the wrist's screen position helps and pick the weight to use.
+
+Options (for checking volunteer recordings before they're merged, see
+docs/volunteer-recordings.md):
+    python check_references.py --scoring best_k         # score with the best-K mode
+    python check_references.py --refs path/to/staging   # check a candidate folder
 """
+import argparse
 import os
 import numpy as np
 from app import gesture_classifier as gc
 
+parser = argparse.ArgumentParser(description="Offline check of reference recordings.")
+parser.add_argument("--scoring", choices=["all", "best_k"], default=gc.SCORING,
+                    help="how a sign's references are combined (default: the classifier's current SCORING)")
+parser.add_argument("--k", type=int, default=gc.BEST_K, help="K for --scoring best_k")
+parser.add_argument("--refs", default=gc.REFERENCES_DIR, help="reference folder to check (default: references_raw)")
+args = parser.parse_args()
+gc.SCORING, gc.BEST_K = args.scoring, args.k
+print(f"scoring={args.scoring}" + (f" (K={args.k})" if args.scoring == "best_k" else "") + f"  refs={args.refs}")
+
 WEIGHTS = (0.0, 0.5, 1.0, 2.0)
 
 raw = {}  # sign -> [(filename, raw array)]
-for sign in sorted(os.listdir(gc.REFERENCES_DIR)):
-    d = os.path.join(gc.REFERENCES_DIR, sign)
+for sign in sorted(os.listdir(args.refs)):
+    d = os.path.join(args.refs, sign)
     if not os.path.isdir(d):
         continue
     raw[sign] = [(f, np.load(os.path.join(d, f)))
@@ -48,7 +63,7 @@ def run(weight, verbose):
             for other, oitems in refs.items():
                 ds = [gc._dtw_distance(arr, a) for g, a in oitems if not (other == sign and g == f)]
                 if ds:
-                    avgs[other] = sum(ds) / len(ds)
+                    avgs[other] = gc.sign_score(ds)
             best = min(avgs, key=avgs.get)
             confusion[sign][best] += 1
             own.append(avgs.get(sign, float("inf")))
