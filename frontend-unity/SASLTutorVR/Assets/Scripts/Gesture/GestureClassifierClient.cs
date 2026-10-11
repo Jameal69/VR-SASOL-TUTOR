@@ -486,6 +486,11 @@ public class GestureClassifierClient : MonoBehaviour
 
     void OnGUI()
     {
+        // This desktop panel is drawn straight onto the screen. In a headset that
+        // lands in one eye only and sticks to your view, so in VR it's hidden;
+        // the VR status board in the room shows the same information.
+        if (UnityEngine.XR.XRSettings.isDeviceActive) return;
+
         GUIStyle style = new GUIStyle(GUI.skin.label);
         style.fontSize = 26;
         style.fontStyle = FontStyle.Bold;
