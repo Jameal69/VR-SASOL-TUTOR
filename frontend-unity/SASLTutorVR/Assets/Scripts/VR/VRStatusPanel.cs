@@ -9,10 +9,13 @@ public class VRStatusPanel : MonoBehaviour
 {
     public GestureClassifierClient classifier;
     public Text text;
+    [Tooltip("Optional: shows the hand-tracking test line when the probe is in the scene.")]
+    public HandTrackingProbe probe;
 
     void Start()
     {
         if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
+        if (probe == null) probe = FindFirstObjectByType<HandTrackingProbe>();
     }
 
     void Update()
@@ -25,6 +28,7 @@ public class VRStatusPanel : MonoBehaviour
             $"{classifier.CurrentLessonTitle}  ({classifier.CurrentSignNumber}/{classifier.CurrentLessonSignCount})\n" +
             $"<size=56><b>Sign: {classifier.expectedSignName}</b></size>\n\n" +
             $"{classifier.StatusText}{result}{verdict}\n\n" +
-            "<size=26>A: record    B: watch the avatar    Stick: lesson / sign</size>";
+            "<size=26>A: record    B: watch the avatar    Stick: lesson / sign</size>" +
+            (probe != null ? "\n\n<size=26>" + probe.Report + "</size>" : "");
     }
 }

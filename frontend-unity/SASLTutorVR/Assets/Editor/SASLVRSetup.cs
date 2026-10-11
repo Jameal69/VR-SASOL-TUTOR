@@ -73,6 +73,49 @@ public static class SASLVRSetup
             "OK");
     }
 
+    /// <summary>Adds the hand-tracking test tool (HandTrackingProbe) to the VR scene's rig.</summary>
+    [MenuItem("SASL/Add Hand Tracking Probe")]
+    public static void AddHandTrackingProbe()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            EditorUtility.DisplayDialog("SASL", "Stop Play mode first.", "OK");
+            return;
+        }
+        if (EditorSceneManager.GetActiveScene().path != VRScenePath)
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(VRScenePath) == null)
+            {
+                EditorUtility.DisplayDialog("SASL", "Run SASL > Set Up VR Scene first.", "OK");
+                return;
+            }
+            EditorSceneManager.OpenScene(VRScenePath);
+        }
+
+        var rig = GameObject.Find(RigName);
+        if (rig == null)
+        {
+            EditorUtility.DisplayDialog("SASL", "No XR rig in the VR scene. Run SASL > Set Up VR Scene first.", "OK");
+            return;
+        }
+        var probe = rig.GetComponent<HandTrackingProbe>();
+        if (probe == null) probe = Undo.AddComponent<HandTrackingProbe>(rig);
+        probe.origin = rig.GetComponent<XROrigin>();
+        probe.classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
+
+        var scene = EditorSceneManager.GetActiveScene();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        EditorUtility.DisplayDialog("SASL",
+            "Hand tracking probe added to VRClassroom.\n\n" +
+            "In the headset: switch hand tracking on, put the controllers down, Play.\n" +
+            "Your hand joints show as dots; the board shows how much of the time your right hand is tracked.\n" +
+            "Press H on the keyboard to start/stop a measurement (e.g. around one Hello). " +
+            "Results go to the Console and Logs/hand_tracking_probe.csv.",
+            "OK");
+    }
+
     // ------------------------------------------------------------------ XR settings
 
     static string ConfigureXR()

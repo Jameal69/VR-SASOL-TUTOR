@@ -16,6 +16,10 @@ UserSettings/
 # Python
 __pycache__/
 *.pyc
+# Never commit these: venv is thousands of machine-specific files, and .env holds
+# the database password (this repo is public). Share .env privately instead.
+venv/
+.env
 *.egg-info/
 
 # Visual Studio
