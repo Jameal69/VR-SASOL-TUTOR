@@ -96,6 +96,9 @@ public class GestureClassifierClient : MonoBehaviour
     [Tooltip("Name of the sign being tested, e.g. Hello, Goodbye, Please, Thank You. Used for the on-screen prompt and match check.")]
     public string expectedSignName = "Hello";
 
+    [Tooltip("The info panel at the top left of the screen. The VR scene switches it off (VRSession).")]
+    public bool showDesktopPanel = true;
+
     private const string BackendUrl = "http://localhost:8000/api/gestures/classify";
     private const string CatalogUrl = "http://localhost:8000/api/curriculum/catalog";
 
@@ -489,7 +492,7 @@ public class GestureClassifierClient : MonoBehaviour
         // This desktop panel is drawn straight onto the screen. In a headset that
         // lands in one eye only and sticks to your view, so in VR it's hidden;
         // the VR status board in the room shows the same information.
-        if (UnityEngine.XR.XRSettings.isDeviceActive) return;
+        if (!showDesktopPanel || UnityEngine.XR.XRSettings.isDeviceActive) return;
 
         GUIStyle style = new GUIStyle(GUI.skin.label);
         style.fontSize = 26;

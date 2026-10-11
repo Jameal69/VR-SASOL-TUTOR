@@ -7,22 +7,32 @@ using UnityEngine.InputSystem;
 ///   B               watch the avatar sign it            (keyboard: D)
 ///   Thumbstick L/R  previous / next lesson              (keyboard: Left/Right)
 ///   Thumbstick U/D  previous / next sign                (keyboard: Up/Down)
+///   Y (left)        recentre: stand in front of the avatar again   (keyboard: R)
 /// The keyboard keeps working too.
 /// </summary>
 public class VRControllerInput : MonoBehaviour
 {
     public GestureClassifierClient classifier;
     public AvatarSignPlayer signPlayer;
+    public VRSession session;
 
     InputAction record;
     InputAction demo;
     InputAction browse;
+    InputAction recenter;
     bool stickCentered = true;
 
     void OnEnable()
     {
         if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
         if (signPlayer == null) signPlayer = FindFirstObjectByType<AvatarSignPlayer>();
+        if (session == null) session = FindFirstObjectByType<VRSession>();
+
+        recenter = new InputAction("Recenter", InputActionType.Button);
+        recenter.AddBinding("<XRController>{LeftHand}/secondaryButton");
+        recenter.AddBinding("<Keyboard>/r");
+        recenter.performed += OnRecenter;
+        recenter.Enable();
 
         record = new InputAction("Record", InputActionType.Button);
         record.AddBinding("<XRController>{RightHand}/primaryButton");
@@ -46,6 +56,8 @@ public class VRControllerInput : MonoBehaviour
     {
         record.performed -= OnRecord;
         demo.performed -= OnDemo;
+        recenter.performed -= OnRecenter;
+        recenter.Dispose();
         record.Dispose();
         demo.Dispose();
         browse.Dispose();
@@ -54,6 +66,11 @@ public class VRControllerInput : MonoBehaviour
     void OnRecord(InputAction.CallbackContext _)
     {
         if (classifier != null) classifier.ToggleRecording();
+    }
+
+    void OnRecenter(InputAction.CallbackContext _)
+    {
+        if (session != null) session.Recenter();
     }
 
     void OnDemo(InputAction.CallbackContext _)

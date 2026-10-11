@@ -28,7 +28,7 @@ public class VRStatusPanel : MonoBehaviour
             $"{classifier.CurrentLessonTitle}  ({classifier.CurrentSignNumber}/{classifier.CurrentLessonSignCount})\n" +
             $"<size=56><b>Sign: {classifier.expectedSignName}</b></size>\n\n" +
             $"{classifier.StatusText}{result}{verdict}\n\n" +
-            "<size=26>A: record    B: watch the avatar    Stick: lesson / sign</size>" +
+            "<size=26>A: record    B: watch the avatar    Stick: lesson / sign    Y: recentre</size>" +
             (probe != null ? "\n\n<size=26>" + probe.Report + "</size>" : "");
     }
 }

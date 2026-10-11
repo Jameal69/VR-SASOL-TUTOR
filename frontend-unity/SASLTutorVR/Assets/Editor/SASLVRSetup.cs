@@ -57,10 +57,20 @@ public static class SASLVRSetup
         PlaceResultTextAboveAvatar();
         BuildStatusBoard(classifier);
 
+        // Recentring: face the avatar, stand at the standing spot (also re-applied on existing rigs).
+        var session = rig.GetComponent<VRSession>();
+        var avatar = UnityEngine.Object.FindFirstObjectByType<AvatarResultReactor>();
+        if (session != null)
+        {
+            session.lookTarget = avatar != null ? avatar.transform : null;
+            session.standingSpot = new Vector3(ViewerEye.x, 0f, ViewerEye.z);
+        }
+
         var input = rig.GetComponent<VRControllerInput>();
         if (input == null) input = rig.AddComponent<VRControllerInput>();
         input.classifier = classifier;
         input.signPlayer = signPlayer;
+        input.session = session;
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
@@ -69,7 +79,7 @@ public static class SASLVRSetup
             "VR scene ready: Assets/Scenes/VRClassroom.unity (MainClassroom is unchanged).\n\n" + xrNote +
             "\n\nTest without a headset: press Play, you see the room from standing height and the keyboard works.\n" +
             "With the Quest 3: start Quest Link first, put the headset on, then Play.\n" +
-            "A = record, B = watch the avatar, thumbstick = lesson / sign.",
+            "A = record, B = watch the avatar, thumbstick = lesson / sign, Y (or R) = recentre.",
             "OK");
     }
 
@@ -217,6 +227,18 @@ public static class SASLVRSetup
 
     // ------------------------------------------------------------------ UI in the room
 
+    // Where the learner's eyes are after recentring: 1.6 m in front of the avatar
+    // (avatar at the origin facing +Z). Panels are turned to face this point.
+    static readonly Vector3 ViewerEye = new Vector3(0f, 1.55f, 1.6f);
+
+    // A world-space canvas is readable from its -Z side, so its forward must point away from the viewer.
+    static Quaternion FacingViewer(Vector3 position, bool keepUpright)
+    {
+        Vector3 away = position - ViewerEye;
+        if (keepUpright) away.y = 0f;
+        return Quaternion.LookRotation(away, Vector3.up);
+    }
+
     // The big MATCH / NO MATCH line, as a sign floating above the avatar.
     static void PlaceResultTextAboveAvatar()
     {
@@ -230,7 +252,8 @@ public static class SASLVRSetup
         var rect = canvasObject.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(1600f, 160f);
         rect.localScale = Vector3.one * 0.001f;   // 1.6 m wide
-        rect.SetPositionAndRotation(new Vector3(0f, 2.05f, 0.1f), Quaternion.Euler(0f, 180f, 0f));
+        var position = new Vector3(0f, 2.05f, 0.1f);   // just above the avatar's head, tilted down towards you
+        rect.SetPositionAndRotation(position, FacingViewer(position, keepUpright: false));
 
         var text = canvasObject.transform.Find("ResultText");
         if (text != null)
@@ -243,18 +266,25 @@ public static class SASLVRSetup
         }
     }
 
-    // Lesson, sign, status and controls on a board to the learner's right of the avatar.
+    // Lesson, sign, status and controls on a board to the learner's right, clear of the avatar.
     static void BuildStatusBoard(GestureClassifierClient classifier)
     {
-        if (GameObject.Find("VR Status Board") != null) return;
+        // Learner faces -Z, so their right is -X. Far enough aside not to block the avatar's signing arm.
+        var position = new Vector3(-1.05f, 1.4f, 0.3f);
+        var existing = GameObject.Find("VR Status Board");
+        if (existing != null)
+        {
+            Undo.RecordObject(existing.transform, "Move VR status board");
+            existing.transform.SetPositionAndRotation(position, FacingViewer(position, keepUpright: true));
+            return;
+        }
 
         var board = new GameObject("VR Status Board", typeof(RectTransform), typeof(Canvas));
         board.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
         var rect = board.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(900f, 720f);
         rect.localScale = Vector3.one * 0.001f;   // 0.9 m x 0.72 m
-        // Learner stands at z = 1.6 facing -Z, so their right is -X. Turned slightly towards them.
-        rect.SetPositionAndRotation(new Vector3(-0.85f, 1.35f, 0.35f), Quaternion.Euler(0f, 160f, 0f));
+        rect.SetPositionAndRotation(position, FacingViewer(position, keepUpright: true));
 
         var background = new GameObject("Background", typeof(RectTransform), typeof(Image));
         background.transform.SetParent(board.transform, false);
