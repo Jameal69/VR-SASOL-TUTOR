@@ -7,9 +7,13 @@
 [Ll]ogs/
 *.csproj
 *.sln
+*.slnx
 *.suo
 .vs/
 UserSettings/
+# Scenes Unity saves after a crash (copies, not real work)
+**/[Aa]ssets/_Recovery/
+**/[Aa]ssets/_Recovery.meta
 
 
 
