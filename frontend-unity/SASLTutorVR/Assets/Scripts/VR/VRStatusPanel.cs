@@ -26,9 +26,9 @@ public class VRStatusPanel : MonoBehaviour
         string verdict = classifier.LastWasMatch.HasValue ? (classifier.LastWasMatch.Value ? "\nMATCH" : "\nNO MATCH") : "";
         text.text =
             $"{classifier.CurrentLessonTitle}  ({classifier.CurrentSignNumber}/{classifier.CurrentLessonSignCount})\n" +
-            $"<size=56><b>Sign: {classifier.expectedSignName}</b></size>\n\n" +
+            $"<size=72><b>Sign: {classifier.expectedSignName}</b></size>\n\n" +
             $"{classifier.StatusText}{result}{verdict}\n\n" +
-            "<size=26>A: record    B: watch the avatar    Stick: lesson / sign    Y: recentre</size>" +
-            (probe != null ? "\n\n<size=26>" + probe.Report + "</size>" : "");
+            "<size=34>A: record   B: watch   Stick: lesson / sign   Y: recentre</size>" +
+            (probe != null ? "\n<size=32>" + probe.Report + "</size>" : "");
     }
 }

@@ -241,13 +241,16 @@ public static class SASLVRSetup
     static readonly Vector3 AvatarSpot = new Vector3(0f, 0f, -0.7f);
     static readonly Vector3 ViewerEye = new Vector3(0f, 1.55f, 1.3f);
     const float WallBoardZ = -2.53f;                                        // just in front of the back wall (z = -2.6)
-    static readonly Vector3 WallBoardCentre = new Vector3(0f, 1.95f, WallBoardZ);
-    static readonly Vector2 WallBoardSize = new Vector2(3.5f, 1.6f);
+    static readonly Vector3 WallBoardCentre = new Vector3(0f, 2.0f, WallBoardZ);
+    static readonly Vector2 WallBoardSize = new Vector2(3.8f, 1.7f);
     // Feedback above the avatar's head; status on the learner's right, away from the
     // avatar's signing (right) hand, which is on the learner's left.
-    static readonly Vector3 FeedbackSpot = new Vector3(0f, 2.5f, WallBoardZ + 0.02f);
-    static readonly Vector3 StatusSpot = new Vector3(-1.12f, 1.95f, WallBoardZ + 0.02f);
-    const float WallPanelScale = 0.0012f;   // larger than before: read from about 4 m away
+    static readonly Vector3 FeedbackSpot = new Vector3(0f, 2.62f, WallBoardZ + 0.02f);
+    static readonly Vector3 StatusSpot = new Vector3(-1.2f, 1.9f, WallBoardZ + 0.02f);
+    static readonly Vector2 StatusSizePixels = new Vector2(1000f, 800f);   // x WallPanelScale = 1.3 m x 1.04 m
+    const float WallPanelScale = 0.0013f;   // read from about 4 m away
+    const int StatusFontSize = 48;
+    const int FeedbackFontSize = 72;
 
     // Moves the avatar back, puts the big whiteboard behind it and pins both panels onto it.
     static void LayoutWhiteboard(GameObject rig)
@@ -274,12 +277,23 @@ public static class SASLVRSetup
         {
             board = new GameObject("VR Whiteboard");
             Undo.RegisterCreatedObjectUndo(board, "Create VR whiteboard");
-            AddBox(board, "Frame", new Vector3(0f, 0f, -0.02f), new Vector3(WallBoardSize.x + 0.1f, WallBoardSize.y + 0.1f, 0.03f),
-                   "Assets/Materials/Classroom/Frame.mat");
-            AddBox(board, "Surface", Vector3.zero, new Vector3(WallBoardSize.x, WallBoardSize.y, 0.03f),
-                   "Assets/Materials/Classroom/Whiteboard.mat");
+            AddBox(board, "Frame", "Assets/Materials/Classroom/Frame.mat");
+            AddBox(board, "Surface", "Assets/Materials/Classroom/Whiteboard.mat");
         }
         board.transform.SetPositionAndRotation(WallBoardCentre, Quaternion.identity);
+        // Sizes are re-applied every run, so changing them above updates an existing board.
+        var frame = board.transform.Find("Frame");
+        if (frame != null)
+        {
+            frame.localPosition = new Vector3(0f, 0f, -0.02f);
+            frame.localScale = new Vector3(WallBoardSize.x + 0.1f, WallBoardSize.y + 0.1f, 0.03f);
+        }
+        var surface = board.transform.Find("Surface");
+        if (surface != null)
+        {
+            surface.localPosition = Vector3.zero;
+            surface.localScale = new Vector3(WallBoardSize.x, WallBoardSize.y, 0.03f);
+        }
 
         // A world-space canvas is read from its -Z side; the learner looks towards -Z, so turn it 180°.
         var flatOnBoard = Quaternion.Euler(0f, 180f, 0f);
@@ -289,6 +303,8 @@ public static class SASLVRSetup
             Undo.RecordObject(result.transform, "Pin feedback to whiteboard");
             result.transform.SetPositionAndRotation(FeedbackSpot, flatOnBoard);
             result.transform.localScale = Vector3.one * WallPanelScale;
+            var resultText = result.GetComponentInChildren<Text>();
+            if (resultText != null) resultText.fontSize = FeedbackFontSize;
         }
         var status = GameObject.Find("VR Status Board");
         if (status != null)
@@ -296,8 +312,9 @@ public static class SASLVRSetup
             Undo.RecordObject(status.transform, "Pin status to whiteboard");
             status.transform.SetPositionAndRotation(StatusSpot, flatOnBoard);
             status.transform.localScale = Vector3.one * WallPanelScale;
+            ((RectTransform)status.transform).sizeDelta = StatusSizePixels;
             var text = status.GetComponentInChildren<Text>();
-            if (text != null) text.fontSize = 38;
+            if (text != null) text.fontSize = StatusFontSize;
         }
 
         // Without a headset (or before recentring) the rig starts at the standing spot.
@@ -305,13 +322,11 @@ public static class SASLVRSetup
             rig.transform.SetPositionAndRotation(new Vector3(ViewerEye.x, 0f, ViewerEye.z), Quaternion.Euler(0f, 180f, 0f));
     }
 
-    static void AddBox(GameObject parent, string name, Vector3 localPosition, Vector3 size, string materialPath)
+    static void AddBox(GameObject parent, string name, string materialPath)
     {
         var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
         box.name = name;
         box.transform.SetParent(parent.transform, false);
-        box.transform.localPosition = localPosition;
-        box.transform.localScale = size;
         UnityEngine.Object.DestroyImmediate(box.GetComponent<Collider>());
         var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
         if (material != null) box.GetComponent<Renderer>().sharedMaterial = material;
