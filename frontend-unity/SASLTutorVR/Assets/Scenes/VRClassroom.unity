@@ -163,7 +163,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 48
     m_Alignment: 0
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -1422,7 +1422,7 @@ MonoBehaviour:
     m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 56
+    m_MaxSize: 72
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -2420,6 +2420,7 @@ MonoBehaviour:
   classifier: {fileID: 1078483168}
   text: {fileID: 126896542}
   probe: {fileID: 0}
+  headsetHands: {fileID: 0}
 --- !u!223 &1393310167
 Canvas:
   m_ObjectHideFlags: 0
@@ -2747,6 +2748,7 @@ GameObject:
   - component: {fileID: 2035806738}
   - component: {fileID: 2035806737}
   - component: {fileID: 2035806736}
+  - component: {fileID: 2035806740}
   m_Layer: 0
   m_Name: XR Origin (VR)
   m_TagString: Untagged
@@ -2818,6 +2820,21 @@ Transform:
   - {fileID: 1260895842}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2035806740
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035806735}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d20cfd0ee1e08a43b68f124deaa17f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeadsetHandRecognizer
+  classifier: {fileID: 1078483168}
+  sampleRate: 30
+  webcamAspect: 1.3333334
 --- !u!1 &2073034596
 GameObject:
   m_ObjectHideFlags: 0

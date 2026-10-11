@@ -156,7 +156,7 @@ public class HandTrackingProbe : MonoBehaviour
         }
     }
 
-    static XRHandSubsystem FindHandSubsystem()
+    public static XRHandSubsystem FindHandSubsystem()
     {
         var settings = XRGeneralSettings.Instance;
         if (settings != null && settings.Manager != null && settings.Manager.activeLoader != null)

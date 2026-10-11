@@ -114,17 +114,87 @@ public static class SASLVRSetup
         if (probe == null) probe = Undo.AddComponent<HandTrackingProbe>(rig);
         probe.origin = rig.GetComponent<XROrigin>();
         probe.classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
+        string handTracking = EnableHandTracking();
 
         var scene = EditorSceneManager.GetActiveScene();
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
         EditorUtility.DisplayDialog("SASL",
-            "Hand tracking probe added to VRClassroom.\n\n" +
+            "Hand tracking probe added to VRClassroom. " + handTracking + "\n\n" +
             "In the headset: switch hand tracking on, put the controllers down, Play.\n" +
             "Your hand joints show as dots; the board shows how much of the time your right hand is tracked.\n" +
             "Press H on the keyboard to start/stop a measurement (e.g. around one Hello). " +
             "Results go to the Console and Logs/hand_tracking_probe.csv.",
             "OK");
+    }
+
+    /// <summary>
+    /// EXPERIMENT: adds HeadsetHandRecognizer to the VR scene's rig (G records an
+    /// attempt from the headset's hand tracking). The webcam pipeline is unchanged;
+    /// remove the component to undo.
+    /// </summary>
+    [MenuItem("SASL/Experiments/Add Headset Hand Recognition")]
+    public static void AddHeadsetHandRecognition()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            EditorUtility.DisplayDialog("SASL", "Stop Play mode first.", "OK");
+            return;
+        }
+        if (EditorSceneManager.GetActiveScene().path != VRScenePath)
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(VRScenePath) == null)
+            {
+                EditorUtility.DisplayDialog("SASL", "Run SASL > Set Up VR Scene first.", "OK");
+                return;
+            }
+            EditorSceneManager.OpenScene(VRScenePath);
+        }
+
+        var rig = GameObject.Find(RigName);
+        if (rig == null)
+        {
+            EditorUtility.DisplayDialog("SASL", "No XR rig in the VR scene. Run SASL > Set Up VR Scene first.", "OK");
+            return;
+        }
+        var recognizer = rig.GetComponent<HeadsetHandRecognizer>();
+        if (recognizer == null) recognizer = Undo.AddComponent<HeadsetHandRecognizer>(rig);
+        recognizer.classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
+        string handTracking = EnableHandTracking();
+
+        var scene = EditorSceneManager.GetActiveScene();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        EditorUtility.DisplayDialog("SASL",
+            "Headset hand recognition (experiment) added to VRClassroom. " + handTracking + "\n\n" +
+            "In the headset: hand tracking on, controllers down, backend running, Play.\n" +
+            "Pick a sign on the board, press G, sign it, press G again. The result shows on the board.\n" +
+            "Attempts are saved to Logs/headset_attempts/. The webcam recording (SPACE / A) still works as before.",
+            "OK");
+    }
+
+    // Hand tracking in OpenXR for Windows (Play in the editor via Quest Link uses
+    // the Windows settings). Only switched on by the hand-tracking tools above,
+    // not by Set Up VR Scene. Found by name so this file doesn't need XR Hands.
+    static string EnableHandTracking()
+    {
+        var openxr = OpenXRSettings.GetSettingsForBuildTargetGroup(BuildTargetGroup.Standalone);
+        if (openxr == null) return "(Couldn't find the OpenXR settings for Windows.)";
+        int switched = 0;
+        foreach (var feature in openxr.GetFeatures())
+        {
+            if (feature == null) continue;
+            string name = feature.GetType().Name;
+            if ((name == "HandTracking" || name == "MetaHandTrackingAim") && !feature.enabled)
+            {
+                feature.enabled = true;
+                switched++;
+            }
+        }
+        EditorUtility.SetDirty(openxr);
+        AssetDatabase.SaveAssets();
+        return switched > 0 ? "Hand tracking switched on in OpenXR (Windows)." : "Hand tracking was already on in OpenXR (Windows).";
     }
 
     // ------------------------------------------------------------------ XR settings

@@ -11,11 +11,14 @@ public class VRStatusPanel : MonoBehaviour
     public Text text;
     [Tooltip("Optional: shows the hand-tracking test line when the probe is in the scene.")]
     public HandTrackingProbe probe;
+    [Tooltip("Optional: shows the headset-hands experiment's line when it is in the scene.")]
+    public HeadsetHandRecognizer headsetHands;
 
     void Start()
     {
         if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
         if (probe == null) probe = FindFirstObjectByType<HandTrackingProbe>();
+        if (headsetHands == null) headsetHands = FindFirstObjectByType<HeadsetHandRecognizer>();
     }
 
     void Update()
@@ -29,6 +32,7 @@ public class VRStatusPanel : MonoBehaviour
             $"<size=72><b>Sign: {classifier.expectedSignName}</b></size>\n\n" +
             $"{classifier.StatusText}{result}{verdict}\n\n" +
             "<size=34>A: record   B: watch   Stick: lesson / sign   Y: recentre</size>" +
-            (probe != null ? "\n<size=32>" + probe.Report + "</size>" : "");
+            (probe != null ? "\n<size=32>" + probe.Report + "</size>" : "") +
+            (headsetHands != null ? "\n<size=32>" + headsetHands.Report + "</size>" : "");
     }
 }
