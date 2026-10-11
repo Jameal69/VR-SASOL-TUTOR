@@ -56,6 +56,7 @@ public static class SASLVRSetup
         var rig = BuildRig();
         PlaceResultTextAboveAvatar();
         BuildStatusBoard(classifier);
+        LayoutWhiteboard(rig);
 
         // Recentring: face the avatar, stand at the standing spot (also re-applied on existing rigs).
         var session = rig.GetComponent<VRSession>();
@@ -151,6 +152,13 @@ public static class SASLVRSetup
                 feature.enabled = true;
                 profiles += (profiles.Length > 0 ? ", " : "") + type.Name.Replace("ControllerProfile", "");
             }
+            // Multi-pass draws each eye separately. Single Pass Instanced is faster but the
+            // in-room boards only appeared in one eye with it; this scene is light enough.
+            openxr.renderMode = OpenXRSettings.RenderMode.MultiPass;
+            // Foveated rendering requires Single Pass Instanced, so it's switched off.
+            foreach (var feature in openxr.GetFeatures())
+                if (feature != null && feature.GetType().Name.Contains("Foveat") && feature.enabled)
+                    feature.enabled = false;
             EditorUtility.SetDirty(openxr);
         }
         AssetDatabase.SaveAssets();
@@ -227,9 +235,87 @@ public static class SASLVRSetup
 
     // ------------------------------------------------------------------ UI in the room
 
-    // Where the learner's eyes are after recentring: 1.6 m in front of the avatar
-    // (avatar at the origin facing +Z). Panels are turned to face this point.
-    static readonly Vector3 ViewerEye = new Vector3(0f, 1.55f, 1.6f);
+    // VR layout (avatar faces +Z, the learner looks towards -Z, so the learner's right is -X):
+    // the avatar stands in front of a big whiteboard on the back wall, like a teacher;
+    // the learner stands 2 m in front of the avatar.
+    static readonly Vector3 AvatarSpot = new Vector3(0f, 0f, -0.7f);
+    static readonly Vector3 ViewerEye = new Vector3(0f, 1.55f, 1.3f);
+    const float WallBoardZ = -2.53f;                                        // just in front of the back wall (z = -2.6)
+    static readonly Vector3 WallBoardCentre = new Vector3(0f, 1.95f, WallBoardZ);
+    static readonly Vector2 WallBoardSize = new Vector2(3.5f, 1.6f);
+    // Feedback above the avatar's head; status on the learner's right, away from the
+    // avatar's signing (right) hand, which is on the learner's left.
+    static readonly Vector3 FeedbackSpot = new Vector3(0f, 2.5f, WallBoardZ + 0.02f);
+    static readonly Vector3 StatusSpot = new Vector3(-1.12f, 1.95f, WallBoardZ + 0.02f);
+    const float WallPanelScale = 0.0012f;   // larger than before: read from about 4 m away
+
+    // Moves the avatar back, puts the big whiteboard behind it and pins both panels onto it.
+    static void LayoutWhiteboard(GameObject rig)
+    {
+        var avatar = UnityEngine.Object.FindFirstObjectByType<AvatarResultReactor>();
+        if (avatar != null)
+        {
+            Undo.RecordObject(avatar.transform, "Move avatar back");
+            avatar.transform.SetPositionAndRotation(AvatarSpot, Quaternion.identity);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(avatar.transform);
+        }
+
+        // The classroom's small corner whiteboard would overlap the big one.
+        var classroom = GameObject.Find("Classroom");
+        if (classroom != null)
+            foreach (var name in new[] { "Whiteboard", "Board Frame" })
+            {
+                var part = classroom.transform.Find(name);
+                if (part != null) part.gameObject.SetActive(false);
+            }
+
+        var board = GameObject.Find("VR Whiteboard");
+        if (board == null)
+        {
+            board = new GameObject("VR Whiteboard");
+            Undo.RegisterCreatedObjectUndo(board, "Create VR whiteboard");
+            AddBox(board, "Frame", new Vector3(0f, 0f, -0.02f), new Vector3(WallBoardSize.x + 0.1f, WallBoardSize.y + 0.1f, 0.03f),
+                   "Assets/Materials/Classroom/Frame.mat");
+            AddBox(board, "Surface", Vector3.zero, new Vector3(WallBoardSize.x, WallBoardSize.y, 0.03f),
+                   "Assets/Materials/Classroom/Whiteboard.mat");
+        }
+        board.transform.SetPositionAndRotation(WallBoardCentre, Quaternion.identity);
+
+        // A world-space canvas is read from its -Z side; the learner looks towards -Z, so turn it 180°.
+        var flatOnBoard = Quaternion.Euler(0f, 180f, 0f);
+        var result = GameObject.Find("ResultCanvas");
+        if (result != null)
+        {
+            Undo.RecordObject(result.transform, "Pin feedback to whiteboard");
+            result.transform.SetPositionAndRotation(FeedbackSpot, flatOnBoard);
+            result.transform.localScale = Vector3.one * WallPanelScale;
+        }
+        var status = GameObject.Find("VR Status Board");
+        if (status != null)
+        {
+            Undo.RecordObject(status.transform, "Pin status to whiteboard");
+            status.transform.SetPositionAndRotation(StatusSpot, flatOnBoard);
+            status.transform.localScale = Vector3.one * WallPanelScale;
+            var text = status.GetComponentInChildren<Text>();
+            if (text != null) text.fontSize = 38;
+        }
+
+        // Without a headset (or before recentring) the rig starts at the standing spot.
+        if (rig != null)
+            rig.transform.SetPositionAndRotation(new Vector3(ViewerEye.x, 0f, ViewerEye.z), Quaternion.Euler(0f, 180f, 0f));
+    }
+
+    static void AddBox(GameObject parent, string name, Vector3 localPosition, Vector3 size, string materialPath)
+    {
+        var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        box.name = name;
+        box.transform.SetParent(parent.transform, false);
+        box.transform.localPosition = localPosition;
+        box.transform.localScale = size;
+        UnityEngine.Object.DestroyImmediate(box.GetComponent<Collider>());
+        var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+        if (material != null) box.GetComponent<Renderer>().sharedMaterial = material;
+    }
 
     // A world-space canvas is readable from its -Z side, so its forward must point away from the viewer.
     static Quaternion FacingViewer(Vector3 position, bool keepUpright)
