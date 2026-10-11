@@ -282,14 +282,63 @@ public class GestureClassifierClient : MonoBehaviour
         TargetChanged?.Invoke(expectedSignName);
     }
 
+    // ---- Public controls: used by the keyboard here and by VRControllerInput in the VR scene ----
+
+    public string CurrentLessonTitle => lessons[lessonIndex].title;
+    public int CurrentSignNumber => signIndex + 1;
+    public int CurrentLessonSignCount => lessons[lessonIndex].signs.Length;
+    public string StatusText => statusText;
+    public string ResultText => resultText;
+    public bool? LastWasMatch => lastWasMatch;
+    public bool IsRecording => isRecording;
+
+    /// <summary>Next (+1) or previous (-1) lesson, starting at its first sign. Ignored while recording.</summary>
+    public void ChangeLesson(int delta)
+    {
+        if (!isRecording) SelectSign(lessonIndex + delta, 0);
+    }
+
+    /// <summary>Next (+1) or previous (-1) sign in the current lesson. Ignored while recording.</summary>
+    public void ChangeSign(int delta)
+    {
+        if (!isRecording) SelectSign(lessonIndex, signIndex + delta);
+    }
+
+    /// <summary>Starts recording an attempt, or stops it and sends it to the backend.</summary>
+    public void ToggleRecording()
+    {
+        if (!streamConnected)
+        {
+            Debug.LogWarning("[GestureClassifierClient] Not connected to the camera stream yet.");
+            return;
+        }
+
+        if (!isRecording)
+        {
+            lock (bufferLock) { rawFrameBuffer.Clear(); }
+            isRecording = true;
+            lastWasMatch = null;
+            resultText = "";
+            statusText = "RECORDING... perform the sign, then press SPACE (or A) to stop";
+            Debug.Log("[GestureClassifierClient] Recording started...");
+        }
+        else
+        {
+            isRecording = false;
+            statusText = "Sending to backend...";
+            Debug.Log("[GestureClassifierClient] Recording stopped, sending to backend...");
+            SendCapturedSequence();
+        }
+    }
+
     void HandleLessonBrowserKeys()
     {
         if (isRecording) return;
 
-        if (PressedThisFrame("RightArrow") || PressedThisFrame("RightBracket")) SelectSign(lessonIndex + 1, 0);
-        else if (PressedThisFrame("LeftArrow") || PressedThisFrame("LeftBracket")) SelectSign(lessonIndex - 1, 0);
-        else if (PressedThisFrame("DownArrow")) SelectSign(lessonIndex, signIndex + 1);
-        else if (PressedThisFrame("UpArrow")) SelectSign(lessonIndex, signIndex - 1);
+        if (PressedThisFrame("RightArrow") || PressedThisFrame("RightBracket")) ChangeLesson(+1);
+        else if (PressedThisFrame("LeftArrow") || PressedThisFrame("LeftBracket")) ChangeLesson(-1);
+        else if (PressedThisFrame("DownArrow")) ChangeSign(+1);
+        else if (PressedThisFrame("UpArrow")) ChangeSign(-1);
         else
         {
             int signKey = SignKeyPressedThisFrame();
@@ -309,28 +358,7 @@ public class GestureClassifierClient : MonoBehaviour
 
         if (SpacePressedThisFrame())
         {
-            if (!streamConnected)
-            {
-                Debug.LogWarning("[GestureClassifierClient] Not connected to the camera stream yet.");
-                return;
-            }
-
-            if (!isRecording)
-            {
-                lock (bufferLock) { rawFrameBuffer.Clear(); }
-                isRecording = true;
-                lastWasMatch = null;
-                resultText = "";
-                statusText = "RECORDING... perform the sign, then press SPACE to stop";
-                Debug.Log("[GestureClassifierClient] Recording started...");
-            }
-            else
-            {
-                isRecording = false;
-                statusText = "Sending to backend...";
-                Debug.Log("[GestureClassifierClient] Recording stopped, sending to backend...");
-                SendCapturedSequence();
-            }
+            ToggleRecording();
         }
         else if (!isRecording && streamConnected && statusText.StartsWith("Camera stream NOT"))
         {
