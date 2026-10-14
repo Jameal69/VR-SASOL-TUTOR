@@ -7,15 +7,21 @@
 [Ll]ogs/
 *.csproj
 *.sln
+*.slnx
 *.suo
 .vs/
 UserSettings/
+# Scenes Unity saves after a crash (copies, not real work)
+**/[Aa]ssets/_Recovery/
+**/[Aa]ssets/_Recovery.meta
 
 
 
 # Python
 __pycache__/
 *.pyc
+# Never commit these: venv is thousands of machine-specific files, and .env holds
+# the database password (this repo is public). Share .env privately instead.
 venv/
 .env
 *.egg-info/

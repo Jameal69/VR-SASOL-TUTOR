@@ -6,6 +6,7 @@ socket. See README.md for setup and usage.
 import json
 import os
 import socket
+import sys
 import time
 import urllib.request
 
@@ -41,13 +42,20 @@ def landmarks_to_list(landmarks):
     return [[round(lm.x, 4), round(lm.y, 4), round(lm.z, 4)] for lm in landmarks]
 
 
+# Pose points that must be in view: nose + both shoulders. With "--vr" (signing
+# while wearing a headset, which covers part of the face) only the shoulders.
+#   py -3.12 landmark_streamer.py --vr
+VR_MODE = "--vr" in sys.argv
+BODY_KEYPOINTS = (11, 12) if VR_MODE else (0, 11, 12)
+
+
 def upper_body_visible(pose_landmarks):
     """True when the nose and both shoulders are detected, confident and inside
     the frame. Holistic finds the hands via the body pose, so if these slip out
     of view the hand landmarks get distorted even when the hand is visible."""
     if not pose_landmarks:
         return False
-    for index in (0, 11, 12):  # nose, left shoulder, right shoulder
+    for index in BODY_KEYPOINTS:
         lm = pose_landmarks[index]
         if lm.visibility is not None and lm.visibility < 0.5:
             return False
@@ -64,6 +72,8 @@ def wait_for_unity_connection():
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
     server_socket.listen(1)
+    if VR_MODE:
+        print("VR mode: only the shoulders are checked (the headset covers the face).")
     print(f"Waiting for Unity to connect on {HOST}:{PORT} ... (Ctrl+C to quit)")
 
     # A plain blocking accept() never sees Ctrl+C on Windows, so wait in
