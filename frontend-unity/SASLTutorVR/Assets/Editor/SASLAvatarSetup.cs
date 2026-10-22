@@ -110,7 +110,7 @@ public static class SASLAvatarSetup
 
         // 4. Camera in front of the avatar at chest height, avatar filling most of the frame.
         var camera = Camera.main;
-        if (camera == null) camera = Object.FindFirstObjectByType<Camera>();
+        if (camera == null) camera = Object.FindAnyObjectByType<Camera>();
         if (camera != null)
         {
             Undo.RecordObject(camera.transform, "Frame avatar");
@@ -122,7 +122,7 @@ public static class SASLAvatarSetup
         var reactor = avatar.GetComponent<AvatarResultReactor>();
         if (reactor == null) reactor = Undo.AddComponent<AvatarResultReactor>(avatar);
         Undo.RecordObject(reactor, "Wire avatar reactor");
-        reactor.classifier = Object.FindFirstObjectByType<GestureClassifierClient>();
+        reactor.classifier = Object.FindAnyObjectByType<GestureClassifierClient>();
         reactor.resultText = text;
 
         // 6. Room around the avatar.

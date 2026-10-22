@@ -50,8 +50,8 @@ public static class SASLVRSetup
         }
         var scene = EditorSceneManager.OpenScene(VRScenePath);
 
-        var classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
-        var signPlayer = UnityEngine.Object.FindFirstObjectByType<AvatarSignPlayer>();
+        var classifier = UnityEngine.Object.FindAnyObjectByType<GestureClassifierClient>();
+        var signPlayer = UnityEngine.Object.FindAnyObjectByType<AvatarSignPlayer>();
 
         var rig = BuildRig();
         PlaceResultTextAboveAvatar();
@@ -60,7 +60,7 @@ public static class SASLVRSetup
 
         // Recentring: face the avatar, stand at the standing spot (also re-applied on existing rigs).
         var session = rig.GetComponent<VRSession>();
-        var avatar = UnityEngine.Object.FindFirstObjectByType<AvatarResultReactor>();
+        var avatar = UnityEngine.Object.FindAnyObjectByType<AvatarResultReactor>();
         if (session != null)
         {
             session.lookTarget = avatar != null ? avatar.transform : null;
@@ -113,7 +113,7 @@ public static class SASLVRSetup
         var probe = rig.GetComponent<HandTrackingProbe>();
         if (probe == null) probe = Undo.AddComponent<HandTrackingProbe>(rig);
         probe.origin = rig.GetComponent<XROrigin>();
-        probe.classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
+        probe.classifier = UnityEngine.Object.FindAnyObjectByType<GestureClassifierClient>();
 
         var scene = EditorSceneManager.GetActiveScene();
         EditorSceneManager.MarkSceneDirty(scene);
@@ -255,7 +255,7 @@ public static class SASLVRSetup
     // Moves the avatar back, puts the big whiteboard behind it and pins both panels onto it.
     static void LayoutWhiteboard(GameObject rig)
     {
-        var avatar = UnityEngine.Object.FindFirstObjectByType<AvatarResultReactor>();
+        var avatar = UnityEngine.Object.FindAnyObjectByType<AvatarResultReactor>();
         if (avatar != null)
         {
             Undo.RecordObject(avatar.transform, "Move avatar back");

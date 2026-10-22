@@ -24,9 +24,9 @@ public class VRControllerInput : MonoBehaviour
 
     void OnEnable()
     {
-        if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
-        if (signPlayer == null) signPlayer = FindFirstObjectByType<AvatarSignPlayer>();
-        if (session == null) session = FindFirstObjectByType<VRSession>();
+        if (classifier == null) classifier = FindAnyObjectByType<GestureClassifierClient>();
+        if (signPlayer == null) signPlayer = FindAnyObjectByType<AvatarSignPlayer>();
+        if (session == null) session = FindAnyObjectByType<VRSession>();
 
         recenter = new InputAction("Recenter", InputActionType.Button);
         recenter.AddBinding("<XRController>{LeftHand}/secondaryButton");

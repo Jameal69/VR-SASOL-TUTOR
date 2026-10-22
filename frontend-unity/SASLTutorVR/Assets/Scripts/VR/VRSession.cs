@@ -36,7 +36,7 @@ public class VRSession : MonoBehaviour
     {
         // The desktop info panel is drawn onto the screen, which in a headset
         // means one eye only. The VR status board shows the same information.
-        var classifier = FindFirstObjectByType<GestureClassifierClient>();
+        var classifier = FindAnyObjectByType<GestureClassifierClient>();
         if (classifier != null) classifier.showDesktopPanel = false;
     }
 
