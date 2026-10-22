@@ -240,7 +240,7 @@ public static class SASLSignAnimations
 
     static bool AttachPlayer(SignLibrary library, AnimationClip placeholder)
     {
-        var reactor = UnityEngine.Object.FindFirstObjectByType<AvatarResultReactor>();
+        var reactor = UnityEngine.Object.FindAnyObjectByType<AvatarResultReactor>();
         if (reactor == null) return false;
         var avatar = reactor.gameObject;
         var player = avatar.GetComponent<AvatarSignPlayer>();
@@ -248,7 +248,7 @@ public static class SASLSignAnimations
         Undo.RecordObject(player, "Set up sign player");
         player.library = library;
         player.placeholderClip = placeholder;
-        player.classifier = UnityEngine.Object.FindFirstObjectByType<GestureClassifierClient>();
+        player.classifier = UnityEngine.Object.FindAnyObjectByType<GestureClassifierClient>();
         EditorSceneManager.MarkSceneDirty(avatar.scene);
         return true;
     }

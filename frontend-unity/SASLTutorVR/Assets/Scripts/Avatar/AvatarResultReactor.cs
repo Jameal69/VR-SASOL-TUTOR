@@ -41,7 +41,7 @@ public class AvatarResultReactor : MonoBehaviour
     void OnEnable()
     {
         if (classifier == null)
-            classifier = FindFirstObjectByType<GestureClassifierClient>();
+            classifier = FindAnyObjectByType<GestureClassifierClient>();
 
         if (classifier != null)
         {

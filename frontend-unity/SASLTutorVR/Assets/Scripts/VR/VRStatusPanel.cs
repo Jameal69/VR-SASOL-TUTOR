@@ -14,8 +14,8 @@ public class VRStatusPanel : MonoBehaviour
 
     void Start()
     {
-        if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
-        if (probe == null) probe = FindFirstObjectByType<HandTrackingProbe>();
+        if (classifier == null) classifier = FindAnyObjectByType<GestureClassifierClient>();
+        if (probe == null) probe = FindAnyObjectByType<HandTrackingProbe>();
     }
 
     void Update()

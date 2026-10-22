@@ -47,7 +47,7 @@ public class AvatarSignPlayer : MonoBehaviour
     void Start()
     {
         if (classifier == null)
-            classifier = FindFirstObjectByType<GestureClassifierClient>();
+            classifier = FindAnyObjectByType<GestureClassifierClient>();
 
         layer = animator.GetLayerIndex(layerName);
         if (layer < 0 || library == null || placeholderClip == null)
