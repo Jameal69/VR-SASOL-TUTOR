@@ -6,7 +6,9 @@ socket. See README.md for setup and usage.
 import json
 import os
 import socket
+import struct
 import sys
+import threading
 import time
 import urllib.request
 
@@ -23,6 +25,14 @@ MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "holistic_
 
 HOST = "127.0.0.1"
 PORT = 5052
+
+# The camera preview (with the tracked hand points drawn on it) is also offered
+# on a second port, so the VR scene can show it on the whiteboard: in a headset
+# you can't see this script's window. Unity can't open the webcam itself while
+# this script is using it. Nothing is sent unless something connects.
+PREVIEW_PORT = 5053
+PREVIEW_SIZE = (480, 360)
+PREVIEW_FPS = 15
 
 
 def ensure_model():
@@ -90,6 +100,66 @@ def wait_for_unity_connection():
     return server_socket, client_socket
 
 
+class PreviewServer:
+    """Sends the latest preview frame as JPEG to one viewer (the VR camera
+    view) on PREVIEW_PORT: 4-byte big-endian length, then the JPEG bytes.
+    Runs in background threads so it can never slow down or block the
+    landmark stream; frames are only encoded while a viewer is connected."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.client = None
+        self.last_sent = 0.0
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server.bind((HOST, PREVIEW_PORT))
+        self.server.listen(1)
+        self.server.settimeout(1.0)
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def _accept_loop(self):
+        while True:
+            try:
+                client, _ = self.server.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return  # server closed
+            client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            with self.lock:
+                if self.client:
+                    self.client.close()
+                self.client = client
+            print("Camera view connected (VR whiteboard).")
+
+    @property
+    def wants_frame(self):
+        return self.client is not None and time.time() - self.last_sent >= 1.0 / PREVIEW_FPS
+
+    def send(self, image):
+        self.last_sent = time.time()
+        ok, jpg = cv2.imencode(".jpg", cv2.resize(image, PREVIEW_SIZE), [cv2.IMWRITE_JPEG_QUALITY, 70])
+        if not ok:
+            return
+        data = jpg.tobytes()
+        with self.lock:
+            if not self.client:
+                return
+            try:
+                self.client.sendall(struct.pack(">I", len(data)) + data)
+            except OSError:
+                # The viewer went away (Play stopped); wait for the next one.
+                self.client.close()
+                self.client = None
+
+    def close(self):
+        with self.lock:
+            if self.client:
+                self.client.close()
+                self.client = None
+        self.server.close()
+
+
 def main():
     ensure_model()
 
@@ -103,6 +173,7 @@ def main():
         min_hand_landmarks_confidence=0.3,
     )
 
+    preview_server = PreviewServer()
     server_socket, client_socket = wait_for_unity_connection()
 
     cap = cv2.VideoCapture(0)
@@ -170,6 +241,8 @@ def main():
                 for i, (label, ok_flag) in enumerate(status):
                     cv2.putText(preview, label, (10, 28 + 28 * i), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                                 (0, 200, 0) if ok_flag else (0, 0, 255), 2)
+                if preview_server.wants_frame:
+                    preview_server.send(preview)
                 cv2.imshow("Landmark streamer (press q to quit)", preview)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -178,6 +251,7 @@ def main():
         cv2.destroyAllWindows()
         client_socket.close()
         server_socket.close()
+        preview_server.close()
 
 
 if __name__ == "__main__":

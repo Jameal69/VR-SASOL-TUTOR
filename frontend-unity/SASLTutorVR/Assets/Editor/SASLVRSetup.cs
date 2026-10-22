@@ -127,6 +127,84 @@ public static class SASLVRSetup
             "OK");
     }
 
+    /// <summary>
+    /// Adds a panel to the VR whiteboard that shows the webcam picture (sent by
+    /// landmark_streamer.py), opposite the status board. Safe to run again.
+    /// </summary>
+    [MenuItem("SASL/Add Camera View to Whiteboard")]
+    public static void AddCameraView()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            EditorUtility.DisplayDialog("SASL", "Stop Play mode first.", "OK");
+            return;
+        }
+        if (EditorSceneManager.GetActiveScene().path != VRScenePath)
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            if (AssetDatabase.LoadAssetAtPath<SceneAsset>(VRScenePath) == null)
+            {
+                EditorUtility.DisplayDialog("SASL", "Run SASL > Set Up VR Scene first.", "OK");
+                return;
+            }
+            EditorSceneManager.OpenScene(VRScenePath);
+        }
+
+        var existing = GameObject.Find("VR Camera View");
+        if (existing != null) Undo.DestroyObjectImmediate(existing);
+
+        var view = new GameObject("VR Camera View", typeof(RectTransform), typeof(Canvas));
+        view.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+        var rect = view.GetComponent<RectTransform>();
+        rect.sizeDelta = CameraViewSizePixels;
+        rect.localScale = Vector3.one * WallPanelScale;
+        // Read from its -Z side like the other whiteboard panels.
+        rect.SetPositionAndRotation(CameraViewSpot, Quaternion.Euler(0f, 180f, 0f));
+
+        var background = new GameObject("Background", typeof(RectTransform), typeof(Image));
+        background.transform.SetParent(view.transform, false);
+        Stretch(background.GetComponent<RectTransform>(), 0f);
+        background.GetComponent<Image>().color = new Color(0.08f, 0.1f, 0.14f, 0.85f);
+
+        // 4:3 picture at the top, caption underneath.
+        var picture = new GameObject("Camera Picture", typeof(RectTransform), typeof(RawImage));
+        picture.transform.SetParent(view.transform, false);
+        var pictureRect = picture.GetComponent<RectTransform>();
+        pictureRect.anchorMin = pictureRect.anchorMax = new Vector2(0.5f, 1f);
+        pictureRect.pivot = new Vector2(0.5f, 1f);
+        pictureRect.sizeDelta = new Vector2(960f, 720f);
+        pictureRect.anchoredPosition = new Vector2(0f, -20f);
+        picture.GetComponent<RawImage>().color = new Color(0.15f, 0.17f, 0.22f);   // dark until the first frame arrives
+
+        var captionObject = new GameObject("Caption", typeof(RectTransform), typeof(Text));
+        captionObject.transform.SetParent(view.transform, false);
+        var captionRect = captionObject.GetComponent<RectTransform>();
+        captionRect.anchorMin = new Vector2(0f, 0f);
+        captionRect.anchorMax = new Vector2(1f, 0f);
+        captionRect.pivot = new Vector2(0.5f, 0f);
+        captionRect.sizeDelta = new Vector2(-40f, 90f);
+        captionRect.anchoredPosition = new Vector2(0f, 5f);
+        var caption = captionObject.GetComponent<Text>();
+        caption.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        caption.fontSize = 40;
+        caption.color = Color.white;
+        caption.alignment = TextAnchor.MiddleCenter;
+        caption.text = "Camera view: waiting for landmark_streamer.py";
+
+        var feed = view.AddComponent<VRCameraFeed>();
+        feed.image = picture.GetComponent<RawImage>();
+        feed.caption = caption;
+        Undo.RegisterCreatedObjectUndo(view, "Add camera view");
+
+        var scene = EditorSceneManager.GetActiveScene();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        EditorUtility.DisplayDialog("SASL",
+            "Camera view added to the whiteboard in VRClassroom (opposite the status board).\n\n" +
+            "It shows the webcam picture with the tracked hand points while landmark_streamer.py is running.",
+            "OK");
+    }
+
     // ------------------------------------------------------------------ XR settings
 
     static string ConfigureXR()
@@ -249,6 +327,9 @@ public static class SASLVRSetup
     static readonly Vector3 StatusSpot = new Vector3(-1.2f, 1.9f, WallBoardZ + 0.02f);
     static readonly Vector2 StatusSizePixels = new Vector2(1000f, 800f);   // x WallPanelScale = 1.3 m x 1.04 m
     const float WallPanelScale = 0.0013f;   // read from about 4 m away
+    // Webcam picture on the other side of the board from the status panel.
+    static readonly Vector3 CameraViewSpot = new Vector3(1.2f, 1.9f, WallBoardZ + 0.02f);
+    static readonly Vector2 CameraViewSizePixels = new Vector2(1000f, 840f);   // x WallPanelScale = 1.3 m x 1.09 m
     const int StatusFontSize = 48;
     const int FeedbackFontSize = 72;
 
