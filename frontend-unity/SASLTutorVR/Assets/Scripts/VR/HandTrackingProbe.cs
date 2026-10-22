@@ -58,8 +58,8 @@ public class HandTrackingProbe : MonoBehaviour
 
     void Start()
     {
-        if (origin == null) origin = FindFirstObjectByType<XROrigin>();
-        if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
+        if (origin == null) origin = FindAnyObjectByType<XROrigin>();
+        if (classifier == null) classifier = FindAnyObjectByType<GestureClassifierClient>();
         trackingSpace = origin != null && origin.CameraFloorOffsetObject != null ? origin.CameraFloorOffsetObject.transform : transform;
     }
 

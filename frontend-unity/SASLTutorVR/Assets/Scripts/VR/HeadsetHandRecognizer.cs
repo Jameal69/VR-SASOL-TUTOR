@@ -61,7 +61,7 @@ public class HeadsetHandRecognizer : MonoBehaviour
 
     void Start()
     {
-        if (classifier == null) classifier = FindFirstObjectByType<GestureClassifierClient>();
+        if (classifier == null) classifier = FindAnyObjectByType<GestureClassifierClient>();
         if (Camera.main != null) head = Camera.main.transform;
     }
 

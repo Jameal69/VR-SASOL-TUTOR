@@ -25,6 +25,6 @@ MonoBehaviour:
   - sign: please
     clip: {fileID: 7400000, guid: 71711a7abd613414d97c8cc7f6994a2b, type: 2}
     handmade: 0
-  - sign: thank_you
-    clip: {fileID: 7400000, guid: 87a86cebdaaceeb4a978030dcbcdaf62, type: 2}
-    handmade: 0
+  - sign: thankyou
+    clip: {fileID: -4791504522942941401, guid: c77a9a0cd46beaf4b8590c59d03229f3, type: 3}
+    handmade: 1
