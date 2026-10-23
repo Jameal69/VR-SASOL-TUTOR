@@ -65,3 +65,42 @@ storage, progress aggregation.
 
 **Verification**
 - `VERIFIED = False` in `app/curriculum_data.py`: the alphabet/number articulations are drafted and cross-checked against the RealSASL handshape chart, but not yet confirmed by a Deaf advisor (Milestone report §8.1). A few entries (letters M, N, T; numbers 3, 4, 6, 8, 9) still need confirming against the chart image.
+## Recognition work-in-progress (experimental) & sign scoring
+
+This branch adds exploratory recognition material. It is **experimental and does
+not change the live recogniser** — `gesture_classifier.py`, `/api/gestures/classify`,
+and `references_raw/` are untouched, so the working demo is unaffected.
+
+**What's here:**
+- `ml-service/experimental/handshape_features.py` — a standalone, self-tested
+  feature module implementing the approaches for the hard signs: finger-geometry
+  features (curl / spread — separates U/V, M/N), a head-anchored pointing
+  direction (separates the orientation pairs K/P, G/Q, U/H), and a
+  confidence-gated "palm-check" trigger (asks for a clean re-read only when
+  unsure). Run it with `python handshape_features.py` to see the geometry proven
+  on synthetic hands. It is **not wired into the recogniser** — doing that, with
+  recorded references and real testing, is the next step.
+- `docs/alphabet-recognition-proposal.md` — the design and reasoning: the two
+  categories of confusion and the four complementary fixes, with honest limits.
+- `docs/sign-confidence-scoring.md` — every sign scored for learner **difficulty**
+  and **identification confidence** (now, and projected with the fix), plus the
+  list of signs that stay low-confidence.
+
+**Current state of recognition (see the scoring doc for per-sign detail):**
+- Confident today: the 4 greetings only.
+- Easy to add (references only, no code change): distinct signs — B, L, Y, W, I;
+  numbers 1, 4, 5, 7.
+- Needs the fix: orientation/spread set — K, P, G, Q, H, U, V.
+- Still hard regardless (occlusion/depth): E, M, N, T, R (and fist/ambiguous-number
+  stragglers).
+
+### Approach: attempt every sign, flag confidence, refine later
+
+The recogniser already compares against every sign that has reference recordings,
+so making the camera *attempt* a sign is a matter of recording its references —
+not a code change. The plan is to record references for **all** signs (see
+`docs/recording-plan.md`), let the camera do its best on each, and surface the
+per-sign confidence (reliable vs best-guess) rather than excluding the hard ones.
+Distinct signs work now; orientation signs need the fix; the occluded ones stay
+low-confidence — fine-tune from there. Per-sign detail is in
+`docs/sign-confidence-scoring.md`.
