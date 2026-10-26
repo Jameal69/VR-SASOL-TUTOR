@@ -30,6 +30,11 @@ public class VRSession : MonoBehaviour
     [Tooltip("Eye height used when no headset is connected.")]
     public float fallbackEyeHeight = 1.6f;
 
+    [Tooltip("On recentre, put the eyes at Standing Eye Height instead of trusting the headset's floor. " +
+             "Use this when the headset's floor isn't set up on this PC (you'd otherwise see the room from the ground).")]
+    public bool useFixedEyeHeight = true;
+    public float standingEyeHeight = 1.6f;
+
     bool started;
 
     void Awake()
@@ -83,7 +88,8 @@ public class VRSession : MonoBehaviour
                 origin.RotateAroundCameraUsingOriginUp(Vector3.SignedAngle(forward, toTarget, Vector3.up));
         }
 
-        origin.MoveCameraToWorldLocation(new Vector3(standingSpot.x, head.position.y, standingSpot.z));
+        float eyeY = useFixedEyeHeight ? standingEyeHeight : head.position.y;
+        origin.MoveCameraToWorldLocation(new Vector3(standingSpot.x, eyeY, standingSpot.z));
         Debug.Log("[VRSession] Recentred: standing in front of the avatar.");
     }
 
