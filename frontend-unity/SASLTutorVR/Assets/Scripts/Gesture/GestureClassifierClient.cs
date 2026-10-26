@@ -99,8 +99,12 @@ public class GestureClassifierClient : MonoBehaviour
     [Tooltip("The info panel at the top left of the screen. The VR scene switches it off (VRSession).")]
     public bool showDesktopPanel = true;
 
-    private const string BackendUrl = "http://localhost:8000/api/gestures/classify";
-    private const string CatalogUrl = "http://localhost:8000/api/curriculum/catalog";
+    // 127.0.0.1 rather than "localhost": on Windows "localhost" can resolve to the
+    // IPv6 address first, which the backend doesn't listen on, so requests failed or hung.
+    private const string BackendUrl = "http://127.0.0.1:8000/api/gestures/classify";
+    private const string CatalogUrl = "http://127.0.0.1:8000/api/curriculum/catalog";
+    // Give up on a backend request after this long instead of waiting forever.
+    private const int RequestTimeoutSeconds = 20;
 
     // Lesson browser state (main thread only).
     private List<CatalogLesson> lessons = BuiltInLessons();
@@ -137,6 +141,7 @@ public class GestureClassifierClient : MonoBehaviour
     {
         using (var request = UnityWebRequest.Get(CatalogUrl))
         {
+            request.timeout = RequestTimeoutSeconds;
             yield return request.SendWebRequest();
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -408,6 +413,7 @@ public class GestureClassifierClient : MonoBehaviour
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
+        request.timeout = RequestTimeoutSeconds;
 
         yield return request.SendWebRequest();
 
@@ -420,7 +426,9 @@ public class GestureClassifierClient : MonoBehaviour
         else
         {
             Debug.LogError("[GestureClassifierClient] Request failed: " + request.error + " | " + request.downloadHandler.text);
-            statusText = "Request failed: " + request.error + " (is the backend running?)";
+            statusText = request.error != null && request.error.Contains("timeout")
+                ? "The backend didn't answer in time. Press SPACE to try again"
+                : "Request failed: " + request.error + " (is the backend running?) Press SPACE to try again";
         }
 
         request.Dispose();
