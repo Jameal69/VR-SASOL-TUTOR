@@ -1,0 +1,16 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Shouold run every Monday and Thursday at midnight UTC, well under the +-7 day inactivity threshold that triggers a free-tier pause in supabase.
+    - cron: '0 0 * * 1,4'
+  workflow_dispatch:
+
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase to keep the project active
+        run: |
+          curl -sf "${{ secrets.SUPABASE_URL }}/auth/v1/health"
