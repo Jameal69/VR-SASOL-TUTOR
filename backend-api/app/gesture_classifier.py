@@ -91,6 +91,15 @@ NORMALIZE_BY_PATH = True
 # 0 = shape only. 1 separated signs slightly better offline, but depends on
 # where you sit relative to the camera. Compare values with check_references.py.
 TRAJECTORY_WEIGHT = 0.0
+# Each reference is compared using only the hands it actually uses. In VR the
+# webcam also catches the other hand holding a controller; every reference is
+# signed with one hand, so that extra hand made EVERY sign score far away
+# (seen live on 26 Oct: avg 5-7 instead of ~1.2). A hand counts as used when
+# it's seen in at least this fraction of the reference's frames (some one-hand
+# references catch the resting other hand too: M up to 12%, Thank You up to 41%).
+MIN_HAND_USE = 0.5
+
+HANDS = (slice(0, 63), slice(63, 126))
 
 
 def _landmarks_to_vector(points):
@@ -139,6 +148,20 @@ def _trim_empty_edges(raw):
     if not len(present):
         return raw[:0]
     return raw[present[0]:present[-1] + 1]
+
+
+def _hands_used(raw):
+    """(left_used, right_used) for a raw (frames, 126) sequence."""
+    return tuple(bool(np.mean(np.any(raw[:, hand] != 0, axis=1)) >= MIN_HAND_USE) for hand in HANDS)
+
+
+def _keep_hands(raw, hands_used):
+    """Copy of raw with the landmarks of unused hands zeroed out."""
+    raw = raw.copy()
+    for used, hand in zip(hands_used, HANDS):
+        if not used:
+            raw[:, hand] = 0
+    return raw
 
 
 def _fill_gaps(raw):
@@ -206,13 +229,14 @@ def _dtw_distance(seq_a, seq_b):
     return float(cost[n, m] / (n + m))
 
 
-def _load_all_sign_distances(sequence, allowed_signs=None):
-    """Compares the live sequence against every sign that has reference
-    recordings on disk, not just one. Returns {sign_name: [distance, ...]}.
+def _load_all_sign_distances(live_raw, allowed_signs=None):
+    """Compares the live raw (frames, 126) sequence against every sign that has
+    reference recordings on disk, not just one. Returns {sign_name: [distance, ...]}.
     If allowed_signs is given, only those signs are compared (lesson scoping)."""
     all_distances = {}
     if not os.path.isdir(REFERENCES_DIR):
         return all_distances
+    live_features = {}  # live features per set of hands used, computed once each
 
     for entry in sorted(os.listdir(REFERENCES_DIR)):
         sign_dir = os.path.join(REFERENCES_DIR, entry)
@@ -221,15 +245,20 @@ def _load_all_sign_distances(sequence, allowed_signs=None):
         if allowed_signs is not None and entry not in allowed_signs:
             continue
 
-        refs = []
+        distances = []
         for fname in sorted(os.listdir(sign_dir)):
             if fname.endswith(".npy"):
-                ref = _sequence_features(np.load(os.path.join(sign_dir, fname)))
-                if len(ref) >= 3:
-                    refs.append(ref)
+                ref_raw = np.load(os.path.join(sign_dir, fname)).astype(np.float32).reshape(-1, 126)
+                hands = _hands_used(ref_raw)
+                ref = _sequence_features(_keep_hands(ref_raw, hands))
+                if len(ref) < 3:
+                    continue
+                if hands not in live_features:
+                    live_features[hands] = _sequence_features(_keep_hands(live_raw, hands))
+                distances.append(_dtw_distance(live_features[hands], ref))
 
-        if refs:
-            all_distances[entry] = [_dtw_distance(sequence, ref) for ref in refs]
+        if distances:
+            all_distances[entry] = distances
 
     return all_distances
 
@@ -295,7 +324,7 @@ def classify_sequence(landmark_sequence, sign_label, allowed_signs=None):
     if len(sequence) < 3:
         return "unknown", 0.0
 
-    all_sign_distances = _load_all_sign_distances(sequence, allowed_signs)
+    all_sign_distances = _load_all_sign_distances(raw, allowed_signs)
 
     if sign_label not in all_sign_distances:
         return "unknown", 0.0
