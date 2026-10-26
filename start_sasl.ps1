@@ -1,5 +1,7 @@
 # SASL VR Tutor launcher - started by "Start SASL Tutor.bat" in the same folder.
-# Local helper only: listed in .git/info/exclude so it never shows up in GitHub Desktop.
+# Opens the ML landmark streamer and the backend in their own windows.
+# Needs (per PC): Python 3.12 with mediapipe + opencv-python, backend-api\venv
+# with requirements installed, and backend-api\.env (not in Git - ask the team).
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -11,7 +13,7 @@ function Start-Window($title, $folder, $command) {
 }
 
 function Start-BackendAndML {
-    Start-Window "ML - landmark streamer" "ml-service"  "py -3.12 landmark_streamer.py"
+    Start-Window "ML - landmark streamer" "ml-service"  "py -3.12 landmark_streamer.py --vr"
     Start-Window "Backend API"            "backend-api" "venv\Scripts\python.exe -m uvicorn app.main:app --reload"
 }
 
