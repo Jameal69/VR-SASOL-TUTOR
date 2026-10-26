@@ -17,7 +17,17 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/sasl_vr_tutor",
 )
 
-engine = create_engine(DATABASE_URL)
+# Supabase's pooler and campus/home networks silently drop connections that sit
+# idle, and reusing a dropped one made a classify request fail or hang.
+#   pool_pre_ping: test a pooled connection before using it, reconnect if it's dead
+#   pool_recycle:  replace connections older than 5 minutes
+#   connect_timeout: give up on a new connection after 10 s instead of hanging
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 10},
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
