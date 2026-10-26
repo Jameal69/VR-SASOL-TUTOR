@@ -25,6 +25,7 @@ is compared with every other one using DTW; "correct" means it is nearest its ow
 - Mean distance between the two: 1.46 (w=0), 1.53 (0.5), 1.68 (1.0), 2.15 (2.0). Their within-sign spread grows by the same factor (0.9 -> 1.2), so the trajectory weight does not separate them better.
 - At weight 0 the distance (1.46) is just under `MATCH_THRESHOLD` (1.5): a Thank You attempt can score nearly as a Hello match.
 - Offline each of the 9 Hello/Thank You recordings is still nearest its own sign; the tightest case is 0.91 (own) vs 1.13 (other).
+- Observation (weak, not acted on): in the existing recordings the wrist drifts left on screen during Hello (3 of 4 recordings, dx about -0.06 to -0.07) and right during Thank You (4 of 5, dx about +0.01 to +0.07). This is screen position, not face-relative, and rests on 9 recordings from one signer, so it is not a basis for a feature yet.
 - The recordings contain only hand landmarks (no nose or shoulders), so hand-position-relative-to-face cannot be computed from them.
 
 ## Caveats
