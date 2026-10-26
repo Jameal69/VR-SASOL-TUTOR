@@ -36,7 +36,10 @@ MATCH_THRESHOLD = 1.5
 # default allows. Goodbye's references are within ~0.77 of each other, so with
 # 1.5 almost any open-hand movement (even a still hand, ~1.14) got every vote
 # and passed as Goodbye whenever it was nearer Goodbye than the other lesson signs.
-SIGN_THRESHOLDS = {"goodbye": 1.0}
+# 1.2 (not 1.0) since the SASL Goodbye references were recorded by one signer:
+# another signer's Goodbyes are ~0.8 from them and only passed reliably from 1.2,
+# while every wrong sign tested (Hello, Please, Thank You, a still hand) still failed.
+SIGN_THRESHOLDS = {"goodbye": 1.2}
 
 
 def match_threshold(sign_label):
