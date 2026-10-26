@@ -32,6 +32,16 @@ REFERENCES_DIR = os.path.join(
 # <= 1.41 to every reference of their sign, wrong-sign attempts >= ~1.5.
 MATCH_THRESHOLD = 1.5
 
+# Stricter limits for signs whose references sit much closer together than the
+# default allows. Goodbye's references are within ~0.77 of each other, so with
+# 1.5 almost any open-hand movement (even a still hand, ~1.14) got every vote
+# and passed as Goodbye whenever it was nearer Goodbye than the other lesson signs.
+SIGN_THRESHOLDS = {"goodbye": 1.0}
+
+
+def match_threshold(sign_label):
+    return SIGN_THRESHOLDS.get(sign_label, MATCH_THRESHOLD)
+
 # Tracking-quality gate, checked before classifying. MediaPipe Holistic finds
 # the hands via the body pose, so when a shoulder or the head leaves the frame
 # the hand landmarks come back distorted and EVERY sign scores far away (seen
@@ -298,7 +308,7 @@ def classify_sequence(landmark_sequence, sign_label, allowed_signs=None):
             print(f"    {sign}: avg={sign_score(dists):.3f}  distances={rounded}{marker}")
 
     target_distances = _scoring_distances(all_sign_distances[sign_label])
-    votes = sum(1 for d in target_distances if d <= MATCH_THRESHOLD)
+    votes = sum(1 for d in target_distances if d <= match_threshold(sign_label))
     confidence = votes / len(target_distances)
 
     target_avg = sign_score(all_sign_distances[sign_label])
