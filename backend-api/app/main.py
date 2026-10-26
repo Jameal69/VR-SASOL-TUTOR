@@ -13,6 +13,8 @@ from sqlalchemy import func
 
 from app.database import Base, engine, get_db
 from app import models, schemas, auth
+from app import gesture_classifier
+from app import curriculum_data
 
 # Creates tables if they don't exist yet. Fine for early dev; swap for Alembic
 # migrations once the schema stabilises (see database/ folder for migrations later).
@@ -132,6 +134,33 @@ def list_lessons(
     return schemas.LessonListResponse(lessons=result)
 
 
+@app.get("/api/curriculum/catalog", response_model=schemas.CatalogResponse)
+def curriculum_catalog(db: DBSession = Depends(get_db)):
+    """
+    Every lesson with its signs and their IDs, for the Unity lesson browser.
+    Public and read-only (curriculum content only, no user data), so Unity
+    doesn't need a login. Signs keep the order they have in curriculum_data
+    (Lesson 1: Hello, Goodbye, Please, Thank You), not database order.
+    """
+    order = {
+        lesson["title"]: {item["sign_name"]: i for i, item in enumerate(lesson["curriculum_items"])}
+        for lesson in curriculum_data.CURRICULUM
+    }
+    result = []
+    for lesson in db.query(models.Lesson).order_by(models.Lesson.order_index).all():
+        position = order.get(lesson.title, {})
+        items = sorted(lesson.curriculum_items, key=lambda it: (position.get(it.sign_name, len(position)), it.sign_name))
+        result.append(schemas.CatalogLesson(
+            lesson_id=lesson.id,
+            title=lesson.title,
+            signs=[
+                schemas.CatalogSign(curriculum_item_id=it.id, sign_name=it.sign_name, description=it.description)
+                for it in items
+            ],
+        ))
+    return schemas.CatalogResponse(lessons=result)
+
+
 @app.get("/api/curriculum/lessons/{lesson_id}", response_model=schemas.LessonDetailResponse)
 def get_lesson(lesson_id: str, db: DBSession = Depends(get_db)):
     lesson = db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()
@@ -188,16 +217,40 @@ def end_session(
 # ---------------- Gestures ----------------
 
 @app.post("/api/gestures/classify", response_model=schemas.GestureClassifyResponse)
-def classify_gesture(payload: schemas.GestureClassifyRequest):
+def classify_gesture(payload: schemas.GestureClassifyRequest, db: DBSession = Depends(get_db)):
     """
-    PLACEHOLDER — no real classifier wired in yet. Returns a dummy result so
-    Unity/frontend work can proceed against this endpoint without waiting on
-    Christian's model. Replace the body of this function once ml-service/
-    exposes something callable (or confirm this endpoint moves on-device —
-    see the open question in docs/api-contract.md).
+      shouold be wired to Chritians DTW classifier logic in app/gesture_classifier.py instead of the hardcoded placeholdder. It will still return unkonw, o.o for now since theres no real refernce recordings yet. 
+      Juans content still has to be seeded with christians recordings
     """
-    return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0)
+    item = db.query(models.CurriculumItem).filter(models.CurriculumItem.id == payload.curriculum_item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Curriculum item not found")
 
+    sign_label = item.sign_name.lower().replace(" ", "_")
+    landmark_frames = [frame.model_dump() for frame in payload.landmark_sequence]
+
+    # Signs without reference recordings yet (e.g. new letters) can't be judged:
+    # say so, rather than a NO MATCH that blames the learner.
+    if not gesture_classifier.has_references(sign_label):
+        return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0, retry_reason="sign_not_trained")
+
+    # Poor tracking (head/shoulders out of frame, hand lost) distorts the hand
+    # landmarks, so ask for a retry instead of returning a misleading NO MATCH.
+    problem = gesture_classifier.tracking_problem(landmark_frames)
+    if problem:
+        return schemas.GestureClassifyResponse(predicted_sign="unknown", confidence_score=0.0, retry_reason=problem)
+
+    # Lesson scoping: only compare against signs from the same lesson, so e.g.
+    # a flat-hand letter can't beat Hello once the alphabet has recordings.
+    lesson_signs = db.query(models.CurriculumItem.sign_name).filter(
+        models.CurriculumItem.lesson_id == item.lesson_id
+    ).all()
+    allowed_signs = [name.lower().replace(" ", "_") for (name,) in lesson_signs]
+
+    predicted_sign, confidence = gesture_classifier.classify_sequence(
+        landmark_frames, sign_label, allowed_signs=allowed_signs
+    )
+    return schemas.GestureClassifyResponse(predicted_sign=predicted_sign, confidence_score=confidence)
 
 @app.post("/api/gestures", response_model=schemas.GestureCreateResponse, status_code=201)
 def create_gesture_record(
@@ -221,17 +274,40 @@ def create_gesture_record(
 
 @app.post("/api/feedback", response_model=schemas.FeedbackResponse)
 def create_feedback(payload: schemas.FeedbackRequest, db: DBSession = Depends(get_db)):
+    """
+    Derives real scores from the gesture's actual confidence_score instead of a
+    hardcoded 3,3,3,3. Still not a true per-channel breakdown, that needs
+    Christian/Markus's four-dimension scoring work (see semester roadmap,
+    September). This is an honest interim step: real data driving all four
+    numbers uniformly, not fake data, but not full diagnostic accuracy yet.
+    """
     gesture = db.query(models.GestureRecord).filter(models.GestureRecord.id == payload.gesture_id).first()
     if not gesture:
         raise HTTPException(status_code=404, detail="Gesture record not found")
 
-    # PLACEHOLDER scoring — replace once there's a real basis for per-dimension scores.
-    dimension_scores = schemas.DimensionScores(handshape=3, movement=3, spatial_placement=3, non_manual=3)
+    confidence = gesture.confidence_score or 0.0
+    # Map 0.0-1.0 confidence onto a 1-5 scale, same scale the wireframes use.
+    derived_score = max(1, min(5, round(confidence * 5)))
+
+    dimension_scores = schemas.DimensionScores(
+        handshape=derived_score,
+        movement=derived_score,
+        spatial_placement=derived_score,
+        non_manual=derived_score,
+    )
+
+    if confidence >= 0.8:
+        suggestion = "Strong match, keep signing like that."
+    elif confidence >= 0.5:
+        suggestion = "Close, but not quite matching the reference, try again."
+    else:
+        suggestion = "Didn't match closely, check the handshape and try again."
+
     feedback = models.Feedback(
         gesture_id=gesture.id,
-        accuracy_score=gesture.confidence_score or 0.0,
+        accuracy_score=confidence,
         dimension_scores=dimension_scores.model_dump(),
-        suggestion_text="Placeholder feedback — real scoring logic not implemented yet.",
+        suggestion_text=suggestion,
     )
     db.add(feedback)
     db.commit()
